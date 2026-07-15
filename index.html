@@ -637,41 +637,46 @@
       return;
     }
 
-    const frag = range.extractContents();
-
-    function processNode(node) {
-      if (node.nodeType === 3) {
-        if (node.textContent.length === 0) return node;
-        const mark = document.createElement('mark');
-        mark.style.backgroundColor = color;
-        mark.style.color = 'inherit';
-        mark.appendChild(node.cloneNode(true));
-        return mark;
-      } else if (node.nodeType === 1) {
-        if (node.tagName === 'DIV' || node.tagName === 'BR' || node.tagName === 'P') {
-          Array.from(node.childNodes).forEach(child => {
-            node.replaceChild(processNode(child), child);
-          });
-          return node;
-        } else if (node.tagName === 'MARK') {
-          node.style.backgroundColor = color;
-          return node;
-        } else {
-          const mark = document.createElement('mark');
-          mark.style.backgroundColor = color;
-          mark.style.color = 'inherit';
-          mark.appendChild(node.cloneNode(true));
-          return mark;
-        }
+    // 선택 범위와 겹치는 "텍스트 노드" 단위로만 형광펜을 입힌다.
+    // (기존 방식은 range 전체를 extractContents()로 통째로 뜯어내면서 문단을
+    //  감싸는 div까지 함께 복제/재삽입되어, 줄바꿈이 새로 생기고 문단 여백까지
+    //  칠해지는 문제가 있었음 — 문단 구조는 건드리지 않고 텍스트 노드만 감싼다)
+    const walker = document.createTreeWalker(textBlock, NodeFilter.SHOW_TEXT, {
+      acceptNode(node){
+        return range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       }
-      return node;
-    }
+    });
+    const textNodes = [];
+    let n;
+    while((n = walker.nextNode())) textNodes.push(n);
 
-    Array.from(frag.childNodes).forEach(child => {
-      frag.replaceChild(processNode(child), child);
+    textNodes.forEach(node=>{
+      if(node.textContent.length === 0) return;
+
+      const nodeRange = document.createRange();
+      nodeRange.selectNodeContents(node);
+      if(node === range.startContainer) nodeRange.setStart(node, range.startOffset);
+      if(node === range.endContainer) nodeRange.setEnd(node, range.endOffset);
+      if(nodeRange.collapsed) return;
+
+      const parent = node.parentNode;
+      const fullyCovered = nodeRange.toString() === node.textContent;
+
+      // 이미 이 텍스트 노드 전체가 하나의 mark로 감싸져 있다면, 새 mark를 또
+      // 씌우지 않고 기존 mark의 색만 바꾼다.
+      if(fullyCovered && parent && parent.tagName === 'MARK' && parent.childNodes.length === 1){
+        parent.style.backgroundColor = color;
+        return;
+      }
+
+      const frag = nodeRange.extractContents();
+      const mark = document.createElement('mark');
+      mark.style.backgroundColor = color;
+      mark.style.color = 'inherit';
+      mark.appendChild(frag);
+      nodeRange.insertNode(mark);
     });
 
-    range.insertNode(frag);
     window.getSelection().removeAllRanges();
     savedRange = null;
     updateCanvasSize();
@@ -680,8 +685,29 @@
   $$('[data-hl]').forEach(sw=>{
     sw.addEventListener('click', ()=> applyHighlight(sw.dataset.hl));
   });
-  // 컬러 피커 버그 해결: input 대신 선택 완료 시점인 change 이벤트 사용
-  $('#hlCustom').addEventListener('change', e=> applyHighlight(e.target.value));
+  // 모바일 컬러 피커 버그 해결: 기기/브라우저에 따라 'change'가 아니라
+  // 'input'만 발생하거나, 팔레트가 닫히며 포커스가 빠지는 시점에야 값이
+  // 확정되는 경우가 있어 한 이벤트에만 의존하면 색 선택이 끝나기도 전에
+  // 적용되지 않고 팔레트가 닫혀버리는 것처럼 보일 수 있다.
+  // 'change'와 'blur' 양쪽에서 최종값을 한 번만 적용하고, DOM 변경은
+  // 팔레트가 완전히 닫힌 뒤로 미뤄 네이티브 UI와의 충돌을 피한다.
+  (function(){
+    const hlCustom = $('#hlCustom');
+    let hlApplied = false;
+    hlCustom.addEventListener('input', ()=>{ hlApplied = false; });
+    hlCustom.addEventListener('change', e=>{
+      hlApplied = true;
+      const color = e.target.value;
+      setTimeout(()=> applyHighlight(color), 0);
+    });
+    hlCustom.addEventListener('blur', e=>{
+      if(!hlApplied){
+        const color = e.target.value;
+        setTimeout(()=> applyHighlight(color), 0);
+      }
+      hlApplied = false;
+    });
+  })();
 
   $('#btnHlClear').addEventListener('click', ()=>{
     const sel = window.getSelection();
