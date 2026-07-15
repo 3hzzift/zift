@@ -898,8 +898,18 @@
     if(document.activeElement) document.activeElement.blur();
     window.getSelection().removeAllRanges();
 
+    // .preview-scale has `transition: transform .12s ease`. Flipping the
+    // transform to 'none' does NOT apply instantly — it animates over
+    // 120ms. If we measure the highlight rects right away, we capture the
+    // mid-animation position, which is why the highlight ended up in the
+    // wrong spot. Fix: kill the transition for the duration of the export,
+    // force a reflow so the browser commits 'none' immediately, measure,
+    // then restore both afterwards (also snapped, not animated).
     const prevTransform = previewScale.style.transform;
+    const prevTransition = previewScale.style.transition;
+    previewScale.style.transition = 'none';
     previewScale.style.transform = 'none';
+    void previewScale.offsetHeight; // force layout flush before measuring
 
     let hlState = null;
     try{
@@ -914,6 +924,8 @@
       teardownExportHighlightLayer(hlState);
       hlState = null;
       previewScale.style.transform = prevTransform;
+      void previewScale.offsetHeight;
+      previewScale.style.transition = prevTransition;
 
       shot.toBlob(async (blob)=>{
         if(!blob){ showToast('이미지 생성에 실패했어요'); btn.disabled=false; btn.textContent=original; return; }
@@ -943,6 +955,8 @@
     }catch(err){
       if(hlState) teardownExportHighlightLayer(hlState);
       previewScale.style.transform = prevTransform;
+      void previewScale.offsetHeight;
+      previewScale.style.transition = prevTransition;
       showToast('이미지 생성 중 문제가 발생했어요');
       btn.disabled = false;
       btn.textContent = original;
