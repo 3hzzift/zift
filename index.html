@@ -889,6 +889,57 @@
     updateCanvasSize();
   });
 
+  /* ---------------- 저장 시 다중 라인 형광펜 분리 ---------------- */
+  // html2canvas는 한 줄바꿈에 걸쳐 있는 인라인 요소(mark)의 배경색을
+  // 줄 단위로 정확히 잘라서 그리지 못하고, 통째로(앞 여백까지 포함해서)
+  // 채워버리는 문제가 있다. 저장 직전에 여러 줄에 걸친 mark를 줄 경계에서
+  // 잘라 "줄마다 하나씩"의 mark로 나누면 각 mark가 한 줄 안에만 있게 되어
+  // html2canvas도 실제 선택 영역만 정확히 칠하게 된다.
+  function splitMultilineMarks(){
+    const marks = Array.from(textBlock.querySelectorAll('mark'));
+    marks.forEach(mark=>{
+      if(mark.childNodes.length !== 1 || mark.firstChild.nodeType !== 3) return;
+      const textNode = mark.firstChild;
+      const text = textNode.textContent;
+      if(text.length <= 1) return;
+
+      const fullRange = document.createRange();
+      fullRange.selectNodeContents(textNode);
+      if(fullRange.getClientRects().length <= 1) return;
+
+      const boundaries = [0];
+      let lastTop = null;
+      const charRange = document.createRange();
+      for(let i=0;i<text.length;i++){
+        charRange.setStart(textNode, i);
+        charRange.setEnd(textNode, i+1);
+        const rc = charRange.getClientRects()[0];
+        if(!rc) continue;
+        if(lastTop === null){
+          lastTop = rc.top;
+        } else if(Math.abs(rc.top - lastTop) > 1){
+          boundaries.push(i);
+          lastTop = rc.top;
+        }
+      }
+      boundaries.push(text.length);
+      if(boundaries.length <= 2) return;
+
+      const color = mark.style.backgroundColor;
+      const frag = document.createDocumentFragment();
+      for(let i=0;i<boundaries.length-1;i++){
+        const segment = text.slice(boundaries[i], boundaries[i+1]);
+        if(segment.length === 0) continue;
+        const m = document.createElement('mark');
+        m.style.backgroundColor = color;
+        m.style.color = 'inherit';
+        m.textContent = segment;
+        frag.appendChild(m);
+      }
+      mark.parentNode.replaceChild(frag, mark);
+    });
+  }
+
   /* ---------------- download ---------------- */
   $('#btnDownload').addEventListener('click', async ()=>{
     const btn = $('#btnDownload');
@@ -900,6 +951,7 @@
 
     const prevTransform = previewScale.style.transform;
     previewScale.style.transform = 'none';
+    splitMultilineMarks();
 
     try{
       const shot = await html2canvas(canvas, {
