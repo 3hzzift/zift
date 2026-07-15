@@ -895,8 +895,16 @@
   // 그리기 때문에, 문단 전체가 칠해지는 것처럼 보인다. 저장 직전에 그런
   // mark를 실제 줄 경계에서 잘라 "줄마다 하나씩"으로 나누면 각 mark가 한
   // 줄 안에만 있게 되어 배경이 실제 선택 영역만큼만 칠해진다.
-  function splitMultilineMarks(){
-    const marks = Array.from(textBlock.querySelectorAll('mark'));
+  //
+  // ⚠ 이 함수는 반드시 저장용으로 따로 만든 복제본(clone)에만 실행해야 한다.
+  // 예전에는 화면에 실제로 표시되는 textBlock을 직접 이 함수로 쪼갠 뒤
+  // 되돌리지 않아서, 저장 버튼을 한 번 누르는 순간부터 편집 화면의 문장이
+  // 영구적으로 여러 개의 <mark>로 쪼개진 채 남아버리는 문제가 있었다.
+  // (다시 그 부분을 드래그해서 형광펜을 수정하거나 지울 때도 예상과 다르게
+  // 동작하고, 무엇보다 아래 padding 보정 없이 여러 mark로 나뉘면 나뉜
+  // 지점마다 없던 공백이 생겨 보이는 원인이 됐다.)
+  function splitMultilineMarks(root){
+    const marks = Array.from(root.querySelectorAll('mark'));
     marks.forEach(mark=>{
       if(mark.childNodes.length !== 1 || mark.firstChild.nodeType !== 3) return;
       const textNode = mark.firstChild;
@@ -928,13 +936,24 @@
       if(boundaries.length <= 2) return;
 
       const color = mark.style.backgroundColor;
+      const total = boundaries.length - 1;
       const frag = document.createDocumentFragment();
-      for(let i=0;i<boundaries.length-1;i++){
+      for(let i=0;i<total;i++){
         const segment = text.slice(boundaries[i], boundaries[i+1]);
         if(segment.length === 0) continue;
         const m = document.createElement('mark');
         m.style.backgroundColor = color;
         m.style.color = 'inherit';
+        // .text-block mark 스타일의 좌우 padding(0.15em)은 원래 "형광펜 칠한
+        // 문장 전체"의 시작/끝에만 붙어야 하는 여백이다. 한 문장을 줄 단위로
+        // 여러 mark로 쪼개면 그 padding이 조각마다 다시 붙어버려서, 원래
+        // 붙어 있던 글자 사이(예: "사람이")에 여백이 겹겹이 쌓여 없던
+        // 띄어쓰기처럼 보이는 게 이번 버그의 핵심 원인이었다. 맨 처음
+        // 조각만 왼쪽 padding을, 맨 마지막 조각만 오른쪽 padding을 남기고
+        // 나머지 안쪽 경계는 0으로 없애 이어붙였을 때 이음매가 보이지
+        // 않게 한다.
+        if(i > 0) m.style.paddingLeft = '0';
+        if(i < total - 1) m.style.paddingRight = '0';
         m.textContent = segment;
         frag.appendChild(m);
       }
@@ -951,27 +970,39 @@
     if(document.activeElement) document.activeElement.blur();
     window.getSelection().removeAllRanges();
 
-    const prevTransform = previewScale.style.transform;
-    previewScale.style.transform = 'none';
-    splitMultilineMarks();
+    // 캡처 전용 복제본을 화면 밖에 만들어서 그 위에서만 형광펜 분리를
+    // 수행한다. 실제 편집 화면(canvas/textBlock)은 절대 건드리지 않으므로
+    // 저장을 여러 번 눌러도, 저장 후에 다시 편집을 이어가도 항상 원래
+    // 상태 그대로 유지된다.
+    const stage = document.createElement('div');
+    stage.style.position = 'fixed';
+    stage.style.left = '-99999px';
+    stage.style.top = '0';
+    stage.style.pointerEvents = 'none';
+    const clone = canvas.cloneNode(true);
+    // 복제본에는 미리보기 확대/축소 transform이 적용돼 있지 않으므로
+    // (canvas 자체는 transform을 갖지 않는다) 별도 보정이 필요 없다.
+    stage.appendChild(clone);
+    document.body.appendChild(stage);
+    splitMultilineMarks(clone);
 
     try{
-      // letterRendering: true → html2canvas가 텍스트를 "단어" 단위가 아니라
-      // "글자" 단위로 하나씩 측정해서 그리도록 강제한다. (foreignObjectRendering은
-      // 모바일 크롬에서 배경/영역이 통째로 깨지는 문제가 있어 사용하지 않음)
-      // 위에서 형광펜을 줄 단위 mark 여러 개로 쪼갰을 때, html2canvas가 기본값인
-      // "단어" 단위 재구성을 하면 쪼개진 지점에 없던 공백이 생기는 문제가
-      // 있었는데, letterRendering을 켜면 각 글자를 실제 위치 그대로 그리므로
-      // 이 문제가 사라진다.
-      const shot = await html2canvas(canvas, {
+      // letterRendering은 켜지 않는다. html2canvas가 한글을 한 글자씩
+      // 따로 측정해서 그리게 만드는 옵션인데, 폰트에 따라 글자 사이 간격이
+      // 실제 브라우저 렌더링과 어긋나 오히려 없던 공백이 생기는 것으로
+      // 알려져 있다(html2canvas의 CJK 텍스트 관련 고질적인 버그). 형광펜을
+      // 줄 경계에서만, 그리고 양 끝에만 padding이 남도록 나눴기 때문에
+      // (splitMultilineMarks 참고) 기본 렌더링으로도 쪼갠 지점에 공백이
+      // 생기지 않는다. (foreignObjectRendering은 모바일 크롬에서 배경/영역이
+      // 통째로 깨지는 문제가 있어 사용하지 않음)
+      const shot = await html2canvas(clone, {
         backgroundColor: null,
         scale: Math.min(3, (window.devicePixelRatio||1) * 2),
-        useCORS: true,
-        letterRendering: true
+        useCORS: true
       });
-      previewScale.style.transform = prevTransform;
 
       shot.toBlob(async (blob)=>{
+        stage.remove();
         if(!blob){ showToast('이미지 생성에 실패했어요'); btn.disabled=false; btn.textContent=original; return; }
         const filename = `발췌_${Date.now()}.png`;
 
@@ -997,7 +1028,7 @@
       }, 'image/png');
 
     }catch(err){
-      previewScale.style.transform = prevTransform;
+      stage.remove();
       showToast('이미지 생성 중 문제가 발생했어요');
       btn.disabled = false;
       btn.textContent = original;
