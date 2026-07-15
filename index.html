@@ -908,19 +908,21 @@
       if(fullRange.getClientRects().length <= 1) return;
 
       const boundaries = [0];
-      let lastTop = null;
+      let lastLeft = null;
       const charRange = document.createRange();
       for(let i=0;i<text.length;i++){
         charRange.setStart(textNode, i);
         charRange.setEnd(textNode, i+1);
         const rc = charRange.getClientRects()[0];
         if(!rc) continue;
-        if(lastTop === null){
-          lastTop = rc.top;
-        } else if(Math.abs(rc.top - lastTop) > 1){
+        // 실제 줄바꿈은 왼쪽 좌표가 뒤로 크게(수십~수백px) 튀는 지점에서만
+        // 일어난다. top 값은 스큐 변형(transform)이나 서브픽셀 렌더링 차이로
+        // 같은 줄 안에서도 미세하게 흔들릴 수 있어 오탐(단어 중간을 잘못
+        // 잘라 없던 공백처럼 보이게 만드는 원인)이 생기므로 사용하지 않는다.
+        if(lastLeft !== null && rc.left < lastLeft - 8){
           boundaries.push(i);
-          lastTop = rc.top;
         }
+        lastLeft = rc.left;
       }
       boundaries.push(text.length);
       if(boundaries.length <= 2) return;
