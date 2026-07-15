@@ -202,6 +202,35 @@
     box-shadow:0 8px 24px rgba(0,0,0,0.2);
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---------- presets ---------- */
+  .preset-bar{ padding:14px 16px 2px; }
+  .preset-head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .preset-head .section-title{ margin:0; }
+  .preset-hint{ font-size:11px; color:var(--muted); white-space:nowrap; }
+  .preset-slots{ display:flex; flex-direction:column; gap:8px; }
+  .preset-slot{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    border:1px solid var(--border); border-radius:10px; background:var(--panel);
+    padding:8px 10px 8px 12px;
+  }
+  .preset-slot.filled{ border-color:var(--accent); }
+  .preset-slot-label{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .preset-slot-name{ font-size:12.5px; font-weight:700; color:var(--ink); }
+  .preset-slot-status{ font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .preset-slot.filled .preset-slot-status{ color:var(--accent); }
+  .preset-slot-actions{ display:flex; align-items:center; gap:6px; flex:none; }
+  .preset-btn{
+    border:1px solid var(--border); background:var(--panel); color:var(--ink);
+    padding:7px 12px; border-radius:999px; font-size:12px; font-weight:600;
+    cursor:pointer; transition:transform .12s ease, opacity .12s ease; white-space:nowrap;
+  }
+  .preset-btn:active{ transform:scale(0.95); }
+  .preset-btn.save{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .preset-btn.del{ padding:7px 10px; color:var(--muted); }
+  .preset-btn:disabled{ opacity:.38; cursor:default; }
+  .preset-btn:disabled:active{ transform:none; }
+  .preset-divider{ height:1px; background:var(--border); margin:14px 16px 0; }
 </style>
 </head>
 <body>
@@ -238,6 +267,15 @@
         <button class="tab active" data-tab="text">문장 설정</button>
         <button class="tab" data-tab="canvas">캔버스 · 배경</button>
       </nav>
+
+      <div class="preset-bar">
+        <div class="preset-head">
+          <span class="section-title">프리셋</span>
+          <span class="preset-hint">현재 설정 저장 · 최대 3개</span>
+        </div>
+        <div class="preset-slots" id="presetSlots"></div>
+      </div>
+      <div class="preset-divider"></div>
 
       <div class="tab-panels">
 
@@ -520,15 +558,19 @@
       cb();
     });
   }
-  bindRange('sizeRange','sizeVal','px','size', applyTextStyles);
-  bindRange('trackRange','trackVal','px','tracking', applyTextStyles);
-  bindRange('leadRange','leadVal','px','leading', applyTextStyles);
-  bindRange('paraRange','paraVal','px','paraGap', applyTextStyles);
-  bindRange('skewRange','skewVal','%','skew', applyTextStyles);
-  bindRange('widthRange','widthVal','px','width', updateCanvasSize);
-  bindRange('marginHRange','marginHVal','px','marginH', updateCanvasSize);
-  bindRange('marginVRange','marginVVal','px','marginV', updateCanvasSize);
-  bindRange('angleRange','angleVal','°','angle', applyBackground);
+  const rangeDefs = [
+    ['sizeRange','sizeVal','px','size', applyTextStyles],
+    ['trackRange','trackVal','px','tracking', applyTextStyles],
+    ['leadRange','leadVal','px','leading', applyTextStyles],
+    ['paraRange','paraVal','px','paraGap', applyTextStyles],
+    ['skewRange','skewVal','%','skew', applyTextStyles],
+    ['widthRange','widthVal','px','width', updateCanvasSize],
+    ['marginHRange','marginHVal','px','marginH', updateCanvasSize],
+    ['marginVRange','marginVVal','px','marginV', updateCanvasSize],
+    ['angleRange','angleVal','°','angle', applyBackground],
+    ['creditSizeRange','creditSizeVal','px','creditSize', updateCredit]
+  ];
+  rangeDefs.forEach(d=> bindRange(d[0], d[1], d[2], d[3], d[4]));
 
   /* ---------------- text color swatches ---------------- */
   $$('#textColorSwatches .swatch').forEach(sw=>{
@@ -649,7 +691,6 @@
   }
   $('#creditCharacter').addEventListener('input', e=>{ state.creditCharacter = e.target.value; updateCredit(); });
   $('#creditAuthor').addEventListener('input', e=>{ state.creditAuthor = e.target.value; updateCredit(); });
-  bindRange('creditSizeRange','creditSizeVal','px','creditSize', updateCredit);
 
   /* ---------------- text styling ---------------- */
   function applyTextStyles(){
@@ -848,11 +889,140 @@
     }
   });
 
+  /* ---------------- sync every control from state ---------------- */
+  function setSegActive(segId, val){
+    const seg = document.getElementById(segId);
+    if(!seg) return;
+    $$('button', seg).forEach(b=> b.classList.toggle('active', b.dataset.value === val));
+  }
+  function syncSwatch(selector, dataKey, value, customSel){
+    const target = (value || '').toLowerCase();
+    $$(selector).forEach(sw=>{
+      const dv = (sw.dataset[dataKey] || '').toLowerCase();
+      sw.classList.toggle('active', dv === target);
+    });
+    if(customSel){ const c = $(customSel); if(c) c.value = value; }
+  }
+  function syncUIFromState(){
+    $('#fontSelect').value = state.font;
+    setSegActive('weightSeg', String(state.weight));
+    setSegActive('alignSeg', state.align);
+    setSegActive('ratioSeg', state.ratio);
+    setSegActive('bgTypeSeg', state.bgType);
+    $('#bgBWrap').style.display = (state.bgType === 'gradient') ? 'block' : 'none';
+
+    rangeDefs.forEach(([id, valId, suffix, key])=>{
+      const r = document.getElementById(id);
+      const v = document.getElementById(valId);
+      if(r) r.value = state[key];
+      if(v) v.textContent = state[key] + suffix;
+    });
+
+    syncSwatch('#textColorSwatches .swatch', 'color', state.textColor, '#textColorCustom');
+    syncSwatch('[data-bg]', 'bg', state.bgA, '#bgACustom');
+    syncSwatch('[data-bg2]', 'bg2', state.bgB, '#bgBCustom');
+  }
+
+  /* ---------------- presets (saved in this browser) ---------------- */
+  const PRESET_KEY = 'oreo_presets_v1';
+  const PRESET_MAX = 3;
+  let presets = loadPresets();
+
+  function loadPresets(){
+    try{
+      const raw = localStorage.getItem(PRESET_KEY);
+      const arr = raw ? JSON.parse(raw) : null;
+      const out = [null, null, null];
+      if(Array.isArray(arr)){
+        for(let i=0; i<PRESET_MAX; i++) out[i] = arr[i] || null;
+      }
+      return out;
+    }catch(e){
+      return [null, null, null];
+    }
+  }
+  function persistPresets(){
+    try{ localStorage.setItem(PRESET_KEY, JSON.stringify(presets)); }
+    catch(e){ showToast('브라우저에 저장할 수 없어요'); }
+  }
+
+  // A preset stores all appearance/layout settings. The quote text itself and
+  // the 출처 이름(캐릭터·제작자) stay as they are, so a preset can be reused
+  // across different quotes.
+  function getSettingsSnapshot(){
+    const { creditCharacter, creditAuthor, ...rest } = state;
+    return Object.assign({}, rest, { savedAt: Date.now() });
+  }
+  function applyPreset(data){
+    Object.keys(state).forEach(k=>{
+      if(k === 'creditCharacter' || k === 'creditAuthor') return;
+      if(k in data) state[k] = data[k];
+    });
+    syncUIFromState();
+    applyTextStyles();
+    applyBackground();
+    updateCanvasSize();
+  }
+
+  function presetStatus(p){
+    if(!p) return '비어 있음';
+    try{
+      const d = new Date(p.savedAt);
+      const pad = n => String(n).padStart(2, '0');
+      return `저장됨 · ${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }catch(e){ return '저장됨'; }
+  }
+
+  function renderPresets(){
+    const wrap = $('#presetSlots');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    for(let i=0; i<PRESET_MAX; i++){
+      const p = presets[i];
+      const filled = !!p;
+      const slot = document.createElement('div');
+      slot.className = 'preset-slot' + (filled ? ' filled' : '');
+      slot.innerHTML =
+        '<div class="preset-slot-label">' +
+          '<span class="preset-slot-name">프리셋 ' + (i+1) + '</span>' +
+          '<span class="preset-slot-status">' + presetStatus(p) + '</span>' +
+        '</div>' +
+        '<div class="preset-slot-actions">' +
+          '<button class="preset-btn" data-act="load"' + (filled ? '' : ' disabled') + '>불러오기</button>' +
+          '<button class="preset-btn save" data-act="save">' + (filled ? '덮어쓰기' : '저장') + '</button>' +
+          '<button class="preset-btn del" data-act="del"' + (filled ? '' : ' disabled') + ' aria-label="프리셋 삭제">✕</button>' +
+        '</div>';
+
+      slot.querySelector('[data-act="load"]').addEventListener('click', ()=>{
+        if(!presets[i]) return;
+        applyPreset(presets[i]);
+        showToast('프리셋 ' + (i+1) + '번을 불러왔어요');
+      });
+      slot.querySelector('[data-act="save"]').addEventListener('click', ()=>{
+        presets[i] = getSettingsSnapshot();
+        persistPresets();
+        renderPresets();
+        showToast('프리셋 ' + (i+1) + '번에 저장했어요');
+      });
+      slot.querySelector('[data-act="del"]').addEventListener('click', ()=>{
+        if(!presets[i]) return;
+        presets[i] = null;
+        persistPresets();
+        renderPresets();
+        showToast('프리셋 ' + (i+1) + '번을 비웠어요');
+      });
+
+      wrap.appendChild(slot);
+    }
+  }
+
   /* ---------------- init ---------------- */
   refreshPlaceholder();
+  syncUIFromState();
   applyTextStyles();
   applyBackground();
   updateCanvasSize();
+  renderPresets();
 })();
 </script>
 </body>
