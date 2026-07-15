@@ -121,7 +121,7 @@
   }
   .text-block > div{ margin:0 0 var(--para-gap,16px) 0; }
   .text-block > div:last-child{ margin-bottom:0; }
-  .text-block mark{ padding:0.05em 0.15em; border-radius:2px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+  .text-block mark{ padding:0.05em 0.15em; border-radius:2px; }
 
   .credit-line{
     width:100%; opacity:0.62; white-space:pre-wrap; word-break:keep-all;
@@ -279,7 +279,6 @@
 
       <div class="tab-panels">
 
-        <!-- ===== TEXT TAB ===== -->
         <section class="panel-section active" data-panel="text">
 
           <p class="section-title">서체 &amp; 굵기</p>
@@ -383,7 +382,6 @@
 
         </section>
 
-        <!-- ===== CANVAS TAB ===== -->
         <section class="panel-section" data-panel="canvas">
 
           <p class="section-title">캔버스 비율</p>
@@ -638,14 +636,42 @@
       showToast('먼저 문장을 드래그해서 선택해주세요');
       return;
     }
-    const mark = document.createElement('mark');
-    mark.style.backgroundColor = color;
-    mark.style.color = 'inherit';
-    try{
-      const frag = range.extractContents();
-      mark.appendChild(frag);
-      range.insertNode(mark);
-    }catch(e){ /* ignore */ }
+
+    const frag = range.extractContents();
+
+    function processNode(node) {
+      if (node.nodeType === 3) {
+        if (node.textContent.length === 0) return node;
+        const mark = document.createElement('mark');
+        mark.style.backgroundColor = color;
+        mark.style.color = 'inherit';
+        mark.appendChild(node.cloneNode(true));
+        return mark;
+      } else if (node.nodeType === 1) {
+        if (node.tagName === 'DIV' || node.tagName === 'BR' || node.tagName === 'P') {
+          Array.from(node.childNodes).forEach(child => {
+            node.replaceChild(processNode(child), child);
+          });
+          return node;
+        } else if (node.tagName === 'MARK') {
+          node.style.backgroundColor = color;
+          return node;
+        } else {
+          const mark = document.createElement('mark');
+          mark.style.backgroundColor = color;
+          mark.style.color = 'inherit';
+          mark.appendChild(node.cloneNode(true));
+          return mark;
+        }
+      }
+      return node;
+    }
+
+    Array.from(frag.childNodes).forEach(child => {
+      frag.replaceChild(processNode(child), child);
+    });
+
+    range.insertNode(frag);
     window.getSelection().removeAllRanges();
     savedRange = null;
     updateCanvasSize();
@@ -654,7 +680,8 @@
   $$('[data-hl]').forEach(sw=>{
     sw.addEventListener('click', ()=> applyHighlight(sw.dataset.hl));
   });
-  $('#hlCustom').addEventListener('input', e=> applyHighlight(e.target.value));
+  // 컬러 피커 버그 해결: input 대신 선택 완료 시점인 change 이벤트 사용
+  $('#hlCustom').addEventListener('change', e=> applyHighlight(e.target.value));
 
   $('#btnHlClear').addEventListener('click', ()=>{
     const sel = window.getSelection();
