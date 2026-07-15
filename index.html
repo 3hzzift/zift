@@ -10,14 +10,14 @@
 
 <style>
   :root{
-    --paper:#FAFAFA;
+    --paper:#FFFFFF;
     --panel:#FFFFFF;
-    --border:#E1E1E1;
+    --border:#DEDEDE;
     --ink:#111111;
-    --muted:#8A8A8A;
-    --accent:#16233F;
-    --accent-soft:#E7E9EE;
-    --danger:#B3554B;
+    --muted:#8C8C8C;
+    --accent:#111111;
+    --accent-soft:#F0F0F0;
+    --danger:#3A3A3A;
     --radius:10px;
   }
   *{ box-sizing:border-box; }
@@ -43,7 +43,7 @@
     position:sticky; top:0; z-index:40;
     display:flex; align-items:center; justify-content:space-between;
     padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top));
-    background:rgba(250,250,250,0.92); backdrop-filter:blur(6px);
+    background:rgba(255,255,255,0.92); backdrop-filter:blur(6px);
     border-bottom:1px solid var(--border);
   }
   .brand{ display:flex; align-items:baseline; gap:8px; }
@@ -110,7 +110,17 @@
     flex:none;
   }
   .canvas.ratio-auto{ overflow:visible; }
+  .bg-image-layer{
+    position:absolute; inset:0; z-index:0;
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    pointer-events:none;
+  }
+  .bg-dark-overlay{
+    position:absolute; inset:0; z-index:1;
+    background:#000000; opacity:0; pointer-events:none;
+  }
   .text-block{
+    position:relative; z-index:2;
     width:100%; outline:none; word-break:keep-all; overflow-wrap:break-word;
     caret-color:currentColor; cursor:text;
   }
@@ -122,8 +132,27 @@
   .text-block > div{ margin:0 0 var(--para-gap,16px) 0; }
   .text-block > div:last-child{ margin-bottom:0; }
   .text-block mark{ padding:0.05em 0.15em; border-radius:2px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+  .text-block span.it{ font-style:italic; }
+
+  .bubble-row{
+    display:flex; width:100%;
+    margin:calc(var(--para-gap,16px) * 0.6) 0;
+  }
+  .bubble-row.dir-left{ justify-content:flex-start; }
+  .bubble-row.dir-right{ justify-content:flex-end; }
+  .bubble{
+    display:inline-block; max-width:84%;
+    padding:0.65em 0.9em; border-radius:1.1em;
+    font-size:0.92em; line-height:1.45;
+    white-space:pre-wrap; word-break:keep-all; overflow-wrap:break-word;
+    cursor:pointer;
+  }
+  .bubble-row.dir-left .bubble{ border-bottom-left-radius:0.3em; }
+  .bubble-row.dir-right .bubble{ border-bottom-right-radius:0.3em; }
+  .bubble.selected{ box-shadow:0 0 0 2px var(--accent); }
 
   .credit-line{
+    position:relative; z-index:2;
     width:100%; opacity:0.62; white-space:pre-wrap; word-break:keep-all;
   }
   .credit-line:empty{ display:none; }
@@ -205,9 +234,18 @@
 
   /* ---------- presets ---------- */
   .preset-bar{ padding:14px 16px 2px; }
-  .preset-head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .preset-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; cursor:pointer; user-select:none; }
   .preset-head .section-title{ margin:0; }
+  .preset-head-right{ display:flex; align-items:center; gap:8px; }
   .preset-hint{ font-size:11px; color:var(--muted); white-space:nowrap; }
+  .preset-caret{
+    display:flex; align-items:center; justify-content:center;
+    width:20px; height:20px; flex:none; color:var(--muted);
+    transition:transform .18s ease;
+  }
+  .preset-caret svg{ width:12px; height:12px; }
+  .preset-bar.collapsed .preset-caret{ transform:rotate(-90deg); }
+  .preset-bar.collapsed .preset-slots{ display:none; }
   .preset-slots{ display:flex; flex-direction:column; gap:8px; }
   .preset-slot{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -250,6 +288,8 @@
       <div class="preview-frame" id="previewFrame">
         <div class="preview-scale" id="previewScale">
           <div id="canvas" class="canvas ratio-auto">
+            <div id="bgImageLayer" class="bg-image-layer"></div>
+            <div id="bgDarkOverlay" class="bg-dark-overlay"></div>
             <div id="textBlock" class="text-block" contenteditable="true" spellcheck="false" data-placeholder="이곳을 눌러 문장을 입력하세요."></div>
             <div id="creditLine" class="credit-line"></div>
           </div>
@@ -268,10 +308,15 @@
         <button class="tab" data-tab="canvas">캔버스 · 배경</button>
       </nav>
 
-      <div class="preset-bar">
-        <div class="preset-head">
+      <div class="preset-bar" id="presetBar">
+        <div class="preset-head" id="presetHead" role="button" tabindex="0" aria-expanded="true">
           <span class="section-title">프리셋</span>
-          <span class="preset-hint">현재 설정 저장 · 최대 3개</span>
+          <div class="preset-head-right">
+            <span class="preset-hint">현재 설정 저장 · 최대 3개</span>
+            <span class="preset-caret">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </span>
+          </div>
         </div>
         <div class="preset-slots" id="presetSlots"></div>
       </div>
@@ -368,6 +413,62 @@
 
           <div class="divider"></div>
 
+          <p class="section-title">부분 글자색</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
+            <div class="swatches">
+              <span class="swatch" data-tc="#E5342B" style="background:#E5342B"></span>
+              <span class="swatch" data-tc="#1E6FE0" style="background:#1E6FE0"></span>
+              <span class="swatch" data-tc="#111111" style="background:#111111"></span>
+              <span class="swatch" data-tc="#8A8A8A" style="background:#8A8A8A"></span>
+              <span class="swatch" data-tc="#FFFFFF" style="background:#FFFFFF"></span>
+              <input type="color" id="tcCustom" value="#e5342b">
+            </div>
+            <div class="field-row" style="margin-top:12px;">
+              <button class="btn ghost" id="btnTcClear" style="padding:8px 12px; font-size:12.5px;">선택한 글자색 지우기</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">기울임</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 적용해주세요</span></div>
+            <div class="field-row" style="margin-top:10px; gap:8px;">
+              <button class="btn ghost" id="btnItalicApply" style="flex:1; padding:8px 12px; font-size:12.5px;">기울임 적용</button>
+              <button class="btn ghost" id="btnItalicClear" style="flex:1; padding:8px 12px; font-size:12.5px;">기울임 해제</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">말풍선</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">대사를 드래그로 선택한 뒤 버튼을 눌러주세요</span></div>
+            <div class="field-row" style="margin-top:10px;">
+              <button class="btn ghost" id="btnMakeBubble" style="width:100%; padding:9px 12px; font-size:12.5px;">선택한 문장을 말풍선으로 만들기</button>
+            </div>
+          </div>
+          <div class="field" id="bubbleEditWrap" style="display:none;">
+            <div class="field-row"><span class="field-label">선택된 말풍선</span></div>
+            <div class="seg" id="bubbleDirSeg">
+              <button data-value="left" class="active">왼쪽</button>
+              <button data-value="right">오른쪽</button>
+            </div>
+            <div class="swatches" style="margin-top:14px;" id="bubbleColorSwatches">
+              <span class="swatch active" data-bubble="#2F6FED" style="background:#2F6FED"></span>
+              <span class="swatch" data-bubble="#AEDBFB" style="background:#AEDBFB"></span>
+              <span class="swatch" data-bubble="#111111" style="background:#111111"></span>
+              <span class="swatch" data-bubble="#FFFFFF" style="background:#FFFFFF"></span>
+              <input type="color" id="bubbleColorCustom" value="#2f6fed">
+            </div>
+            <div class="field-row" style="margin-top:14px;">
+              <button class="btn ghost" id="btnBubbleDelete" style="width:100%; padding:9px 12px; font-size:12.5px; color:var(--danger);">이 말풍선 삭제</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
           <p class="section-title">출처 표기</p>
           <div class="field">
             <div class="credit-inputs">
@@ -424,10 +525,27 @@
             <div class="seg" id="bgTypeSeg">
               <button data-value="solid" class="active">단색</button>
               <button data-value="gradient">그라데이션</button>
+              <button data-value="image">이미지</button>
             </div>
           </div>
 
-          <div class="field">
+          <div id="bgImageWrap" style="display:none;">
+            <div class="field">
+              <div class="field-row"><span class="field-label">배경 이미지</span></div>
+              <div class="field-row" style="margin-top:10px; gap:8px;">
+                <button class="btn ghost" id="btnBgImageUpload" style="flex:1; padding:9px 12px; font-size:12.5px;">이미지 선택</button>
+                <button class="btn ghost" id="btnBgImageClear" style="flex:1; padding:9px 12px; font-size:12.5px; color:var(--danger);">이미지 삭제</button>
+              </div>
+              <input type="file" id="bgImageInput" accept="image/*" style="display:none;">
+              <p class="field-hint" id="bgImageStatus">선택된 이미지가 없어요.</p>
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">이미지 어둡기</span><span class="field-value" id="bgDarkVal">0%</span></div>
+              <input type="range" id="bgDarkRange" min="0" max="100" step="1" value="0">
+            </div>
+          </div>
+
+          <div class="field" id="bgAWrap">
             <div class="field-row"><span class="field-label">배경색 A</span></div>
             <div class="swatches">
               <span class="swatch active" data-bg="#F6F4EF" style="background:#F6F4EF"></span>
@@ -499,6 +617,8 @@
     bgA: '#F6F4EF',
     bgB: '#33415C',
     angle: 135,
+    bgImage: null,
+    bgDarkness: 0,
     creditCharacter: '',
     creditAuthor: '',
     creditSize: 13
@@ -539,6 +659,7 @@
   bindSeg('bgTypeSeg', v=>{
     state.bgType = v;
     $('#bgBWrap').style.display = (v==='gradient') ? 'block' : 'none';
+    $('#bgImageWrap').style.display = (v==='image') ? 'block' : 'none';
     applyBackground();
   });
 
@@ -568,6 +689,7 @@
     ['marginHRange','marginHVal','px','marginH', updateCanvasSize],
     ['marginVRange','marginVVal','px','marginV', updateCanvasSize],
     ['angleRange','angleVal','°','angle', applyBackground],
+    ['bgDarkRange','bgDarkVal','%','bgDarkness', applyBackground],
     ['creditSizeRange','creditSizeVal','px','creditSize', updateCredit]
   ];
   rangeDefs.forEach(d=> bindRange(d[0], d[1], d[2], d[3], d[4]));
@@ -672,6 +794,189 @@
     updateCanvasSize();
   });
 
+  /* ---------------- selection helper (shared) ----------------
+     Used by partial text color / italic / bubble below, same pattern
+     as the highlighter: prefer the live selection, fall back to the
+     last selection saved before a panel button stole focus. */
+  function getSelRange(){
+    const sel = window.getSelection();
+    if(sel && sel.rangeCount>0 && !sel.isCollapsed && textBlock.contains(sel.getRangeAt(0).commonAncestorContainer)){
+      return sel.getRangeAt(0);
+    }
+    return savedRange;
+  }
+
+  /* ---------------- partial text color ---------------- */
+  function applyTextColor(color){
+    const range = getSelRange();
+    if(!range || range.collapsed){
+      showToast('먼저 문장을 드래그해서 선택해주세요');
+      return;
+    }
+    const span = document.createElement('span');
+    span.className = 'tc';
+    span.style.color = color;
+    try{
+      const frag = range.extractContents();
+      span.appendChild(frag);
+      range.insertNode(span);
+    }catch(e){ /* ignore */ }
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
+  }
+
+  $$('[data-tc]').forEach(sw=>{
+    sw.addEventListener('click', ()=> applyTextColor(sw.dataset.tc));
+  });
+  $('#tcCustom').addEventListener('input', e=> applyTextColor(e.target.value));
+
+  $('#btnTcClear').addEventListener('click', ()=>{
+    const range = getSelRange();
+    if(!range){ showToast('지울 글자색 영역을 먼저 선택해주세요'); return; }
+    $$('span.tc', textBlock).forEach(span=>{
+      if(range.intersectsNode(span)){
+        const parent = span.parentNode;
+        while(span.firstChild) parent.insertBefore(span.firstChild, span);
+        parent.removeChild(span);
+      }
+    });
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
+  });
+
+  /* ---------------- italic ---------------- */
+  $('#btnItalicApply').addEventListener('click', ()=>{
+    const range = getSelRange();
+    if(!range || range.collapsed){
+      showToast('먼저 문장을 드래그해서 선택해주세요');
+      return;
+    }
+    const span = document.createElement('span');
+    span.className = 'it';
+    try{
+      const frag = range.extractContents();
+      span.appendChild(frag);
+      range.insertNode(span);
+    }catch(e){ /* ignore */ }
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
+  });
+
+  $('#btnItalicClear').addEventListener('click', ()=>{
+    const range = getSelRange();
+    if(!range){ showToast('해제할 영역을 먼저 선택해주세요'); return; }
+    $$('span.it', textBlock).forEach(span=>{
+      if(range.intersectsNode(span)){
+        const parent = span.parentNode;
+        while(span.firstChild) parent.insertBefore(span.firstChild, span);
+        parent.removeChild(span);
+      }
+    });
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
+  });
+
+  /* ---------------- chat bubble ---------------- */
+  let selectedBubble = null;
+  let lastBubbleColor = '#2F6FED';
+
+  function convertSelectionToBubble(){
+    const range = getSelRange();
+    if(!range || range.collapsed){
+      showToast('말풍선으로 만들 문장을 먼저 선택해주세요');
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'bubble-row dir-left';
+    row.contentEditable = 'false';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.style.background = lastBubbleColor;
+    bubble.dataset.color = lastBubbleColor;
+
+    try{
+      const frag = range.extractContents();
+      bubble.appendChild(frag);
+      row.appendChild(bubble);
+      range.insertNode(row);
+    }catch(e){ return; }
+
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    refreshPlaceholder();
+    updateCanvasSize();
+    selectBubble(bubble);
+  }
+  $('#btnMakeBubble').addEventListener('click', convertSelectionToBubble);
+
+  function selectBubble(bubble){
+    if(selectedBubble && selectedBubble !== bubble) selectedBubble.classList.remove('selected');
+    selectedBubble = bubble;
+    bubble.classList.add('selected');
+    $('#bubbleEditWrap').style.display = 'block';
+    const row = bubble.closest('.bubble-row');
+    setSegActive('bubbleDirSeg', row.classList.contains('dir-right') ? 'right' : 'left');
+    syncSwatch('#bubbleColorSwatches .swatch', 'bubble', bubble.dataset.color || lastBubbleColor, '#bubbleColorCustom');
+  }
+  function deselectBubble(){
+    if(selectedBubble) selectedBubble.classList.remove('selected');
+    selectedBubble = null;
+    $('#bubbleEditWrap').style.display = 'none';
+  }
+
+  textBlock.addEventListener('click', (e)=>{
+    const b = e.target.closest('.bubble');
+    if(b && textBlock.contains(b)){
+      selectBubble(b);
+    } else {
+      deselectBubble();
+    }
+  });
+
+  bindSeg('bubbleDirSeg', v=>{
+    if(!selectedBubble) return;
+    const row = selectedBubble.closest('.bubble-row');
+    row.classList.remove('dir-left', 'dir-right');
+    row.classList.add('dir-' + v);
+    updateCanvasSize();
+  });
+
+  $$('#bubbleColorSwatches .swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      $$('#bubbleColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      $('#bubbleColorCustom').value = sw.dataset.bubble;
+      lastBubbleColor = sw.dataset.bubble;
+      if(selectedBubble){
+        selectedBubble.style.background = sw.dataset.bubble;
+        selectedBubble.dataset.color = sw.dataset.bubble;
+      }
+    });
+  });
+  $('#bubbleColorCustom').addEventListener('input', e=>{
+    $$('#bubbleColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+    lastBubbleColor = e.target.value;
+    if(selectedBubble){
+      selectedBubble.style.background = e.target.value;
+      selectedBubble.dataset.color = e.target.value;
+    }
+  });
+
+  $('#btnBubbleDelete').addEventListener('click', ()=>{
+    if(!selectedBubble) return;
+    const row = selectedBubble.closest('.bubble-row');
+    row.remove();
+    selectedBubble = null;
+    $('#bubbleEditWrap').style.display = 'none';
+    refreshPlaceholder();
+    updateCanvasSize();
+  });
+
   /* ---------------- credit line ---------------- */
   function updateCredit(){
     const c = state.creditCharacter.trim();
@@ -711,13 +1016,50 @@
   }
 
   /* ---------------- background ---------------- */
+  const bgImageLayer = $('#bgImageLayer');
+  const bgDarkOverlay = $('#bgDarkOverlay');
+
   function applyBackground(){
     if(state.bgType === 'solid'){
       canvas.style.background = state.bgA;
-    } else {
+      bgImageLayer.style.backgroundImage = 'none';
+      bgDarkOverlay.style.opacity = 0;
+    } else if(state.bgType === 'gradient'){
       canvas.style.background = `linear-gradient(${state.angle}deg, ${state.bgA}, ${state.bgB})`;
+      bgImageLayer.style.backgroundImage = 'none';
+      bgDarkOverlay.style.opacity = 0;
+    } else if(state.bgType === 'image'){
+      canvas.style.background = state.bgA;
+      bgImageLayer.style.backgroundImage = state.bgImage ? `url(${state.bgImage})` : 'none';
+      bgDarkOverlay.style.opacity = state.bgDarkness / 100;
     }
   }
+
+  /* ---------------- background image upload ---------------- */
+  $('#btnBgImageUpload').addEventListener('click', ()=> $('#bgImageInput').click());
+  $('#bgImageInput').addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(!file.type.startsWith('image/')){
+      showToast('이미지 파일만 선택할 수 있어요');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      state.bgImage = ev.target.result;
+      $('#bgImageStatus').textContent = file.name;
+      applyBackground();
+      showToast('배경 이미지를 적용했어요');
+    };
+    reader.onerror = ()=> showToast('이미지를 불러오지 못했어요');
+    reader.readAsDataURL(file);
+  });
+  $('#btnBgImageClear').addEventListener('click', ()=>{
+    state.bgImage = null;
+    $('#bgImageInput').value = '';
+    $('#bgImageStatus').textContent = '선택된 이미지가 없어요.';
+    applyBackground();
+  });
 
   /* ---------------- canvas sizing ---------------- */
   const ratioMap = {
@@ -984,6 +1326,8 @@
     setSegActive('ratioSeg', state.ratio);
     setSegActive('bgTypeSeg', state.bgType);
     $('#bgBWrap').style.display = (state.bgType === 'gradient') ? 'block' : 'none';
+    $('#bgImageWrap').style.display = (state.bgType === 'image') ? 'block' : 'none';
+    $('#bgImageStatus').textContent = state.bgImage ? '이미지가 적용되어 있어요.' : '선택된 이미지가 없어요.';
 
     rangeDefs.forEach(([id, valId, suffix, key])=>{
       const r = document.getElementById(id);
@@ -996,6 +1340,21 @@
     syncSwatch('[data-bg]', 'bg', state.bgA, '#bgACustom');
     syncSwatch('[data-bg2]', 'bg2', state.bgB, '#bgBCustom');
   }
+
+  /* ---------------- presets: collapse toggle ---------------- */
+  (function(){
+    const bar = $('#presetBar');
+    const head = $('#presetHead');
+    if(!bar || !head) return;
+    function toggle(){
+      const collapsed = bar.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+    });
+  })();
 
   /* ---------------- presets (saved in this browser) ---------------- */
   const PRESET_KEY = 'oreo_presets_v1';
@@ -1024,12 +1383,15 @@
   // the 출처 이름(캐릭터·제작자) stay as they are, so a preset can be reused
   // across different quotes.
   function getSettingsSnapshot(){
-    const { creditCharacter, creditAuthor, ...rest } = state;
+    // bgImage(첨부한 배경 사진) is left out: it's often large base64 data and
+    // can exceed the browser's localStorage quota, which would break preset
+    // saving entirely. Every other appearance/layout setting is preserved.
+    const { creditCharacter, creditAuthor, bgImage, ...rest } = state;
     return Object.assign({}, rest, { savedAt: Date.now() });
   }
   function applyPreset(data){
     Object.keys(state).forEach(k=>{
-      if(k === 'creditCharacter' || k === 'creditAuthor') return;
+      if(k === 'creditCharacter' || k === 'creditAuthor' || k === 'bgImage') return;
       if(k in data) state[k] = data[k];
     });
     syncUIFromState();
