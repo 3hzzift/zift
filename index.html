@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>발췌기 · Quote Maker</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pretendard/1.3.9/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/webfont-kr/KoPubDotum@master/KoPubDotum.css">
+
+<style>
+  :root{
+    --paper:#FAFAFA;
+    --panel:#FFFFFF;
+    --border:#E1E1E1;
+    --ink:#111111;
+    --muted:#8A8A8A;
+    --accent:#16233F;
+    --accent-soft:#E7E9EE;
+    --danger:#B3554B;
+    --radius:10px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Pretendard', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior:none;
+  }
+  button{ font-family:inherit; }
+  input[type="range"]{ -webkit-appearance:none; appearance:none; width:100%; height:4px; background:var(--border); border-radius:2px; outline:none; accent-color:var(--accent); }
+  input[type="range"]::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); border:2px solid #fff; box-shadow:0 0 0 1px var(--border); cursor:pointer; }
+  input[type="color"]{ -webkit-appearance:none; appearance:none; width:34px; height:34px; border:2px solid var(--panel); box-shadow:0 0 0 1px var(--border); border-radius:50%; padding:0; background:none; cursor:pointer; }
+  input[type="color"]::-webkit-color-swatch-wrapper{ padding:0; border-radius:50%; }
+  input[type="color"]::-webkit-color-swatch{ border:none; border-radius:50%; }
+
+  .app{ max-width:1180px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:40;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top));
+    background:rgba(250,250,250,0.92); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border);
+  }
+  .brand{ display:flex; align-items:baseline; gap:8px; }
+  .brand-mark{ width:9px; height:9px; border-radius:2px; background:var(--accent); transform:rotate(45deg); flex:none; }
+  .brand h1{ font-size:16px; font-weight:600; margin:0; letter-spacing:-0.01em; }
+  .topbar-actions{ display:flex; gap:8px; }
+  .btn{
+    border:1px solid var(--border); background:var(--panel); color:var(--ink);
+    padding:9px 14px; border-radius:999px; font-size:13px; font-weight:600;
+    cursor:pointer; transition:transform .12s ease, background .12s ease; white-space:nowrap;
+  }
+  .btn:active{ transform:scale(0.96); }
+  .btn.ghost{ background:transparent; color:var(--muted); border-color:transparent; }
+  .btn.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.primary[disabled]{ opacity:.55; cursor:default; }
+
+  /* ---------- workspace ---------- */
+  .workspace{ flex:1; display:flex; flex-direction:column; }
+  @media (min-width:900px){
+    .workspace{ flex-direction:row; align-items:flex-start; gap:0; }
+  }
+
+  .preview-pane{
+    position:sticky; top:57px; z-index:20;
+    background:var(--paper);
+    padding:14px 14px 10px;
+    border-bottom:1px solid var(--border);
+  }
+  @media (min-width:900px){
+    .preview-pane{
+      flex:1 1 58%; position:sticky; top:57px;
+      height:calc(100vh - 57px); border-bottom:none; border-right:1px solid var(--border);
+      padding:28px; display:flex; flex-direction:column;
+    }
+  }
+
+  /* fixed-size viewing window: the canvas scales up/down to fit inside this,
+     it never needs to be scrolled */
+  .preview-frame{
+    position:relative;
+    height:44vh; min-height:260px; max-height:440px;
+    border-radius:14px;
+    background:
+      linear-gradient(45deg, #EAEAEA 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(-45deg, #EAEAEA 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(45deg, transparent 75%, #EAEAEA 75%) 0 0/16px 16px,
+      linear-gradient(-45deg, transparent 75%, #EAEAEA 75%) 0 0/16px 16px,
+      #F3F3F3;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+  }
+  @media (min-width:900px){ .preview-frame{ flex:1; height:auto; max-height:none; } }
+
+  .preview-scale{
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .12s ease;
+    will-change:transform;
+  }
+  .canvas{
+    position:relative;
+    display:flex; flex-direction:column; justify-content:center;
+    box-shadow:0 1px 3px rgba(30,28,24,0.08), 0 10px 30px rgba(30,28,24,0.07);
+    overflow:hidden;
+    flex:none;
+  }
+  .canvas.ratio-auto{ overflow:visible; }
+  .text-block{
+    width:100%; outline:none; word-break:keep-all; overflow-wrap:break-word;
+    caret-color:currentColor; cursor:text;
+  }
+  .text-block[data-empty="true"]::before{
+    content:attr(data-placeholder);
+    opacity:0.38;
+  }
+  .text-block > div{ margin:0 0 var(--para-gap,16px) 0; }
+  .text-block > div:last-child{ margin-bottom:0; }
+  .text-block mark{ padding:0.05em 0.15em; border-radius:2px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+
+  .credit-line{
+    width:100%; opacity:0.62; white-space:pre-wrap; word-break:keep-all;
+  }
+  .credit-line:empty{ display:none; }
+
+  .credit-inputs{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .credit-inputs input[type="text"]{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel); color:var(--ink); font-size:13px;
+  }
+  .credit-inputs input[type="text"]::placeholder{ color:var(--muted); }
+
+  .canvas-meta{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    font-size:11px; color:var(--muted); padding-top:8px; letter-spacing:.02em;
+  }
+  .canvas-meta .dot{ width:4px; height:4px; border-radius:50%; background:var(--border); }
+
+  /* ---------- panel ---------- */
+  .panel{ background:var(--paper); }
+  @media (min-width:900px){ .panel{ flex:1 1 42%; max-height:calc(100vh - 57px); overflow:auto; } }
+
+  .tabs{
+    position:sticky; top:0; z-index:10;
+    display:flex; gap:4px; padding:10px 14px; background:var(--paper);
+    border-bottom:1px solid var(--border);
+  }
+  @media (min-width:900px){ .tabs{ top:0; } }
+  .tab{
+    flex:1; border:none; background:transparent; color:var(--muted);
+    padding:9px 10px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .tab.active{ background:var(--panel); color:var(--ink); box-shadow:0 0 0 1px var(--border); }
+
+  .panel-section{ display:none; padding:18px 16px 100px; }
+  .panel-section.active{ display:block; }
+
+  .field{ margin-bottom:22px; }
+  .field-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .field-label{ font-size:12.5px; font-weight:600; color:var(--ink); letter-spacing:.01em; }
+  .field-value{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .field-hint{ font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.5; }
+
+  .seg{ display:flex; background:var(--panel); border:1px solid var(--border); border-radius:9px; padding:3px; gap:2px; }
+  .seg button{
+    flex:1; border:none; background:transparent; color:var(--muted);
+    padding:8px 6px; border-radius:6px; font-size:12.5px; font-weight:600; cursor:pointer;
+  }
+  .seg button.active{ background:var(--accent); color:#fff; }
+
+  .swatches{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .swatch{
+    width:28px; height:28px; border-radius:50%; border:2px solid #fff;
+    box-shadow:0 0 0 1px var(--border); cursor:pointer; flex:none;
+  }
+  .swatch.active{ box-shadow:0 0 0 2px var(--accent); }
+  .swatch-add{
+    width:28px; height:28px; border-radius:50%; border:1px dashed var(--muted);
+    background:transparent; color:var(--muted); font-size:15px; line-height:1;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none;
+  }
+
+  select.select{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel); color:var(--ink); font-size:13.5px; font-weight:500;
+  }
+
+  .section-title{ font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--muted); text-transform:uppercase; margin:0 0 14px; }
+  .divider{ height:1px; background:var(--border); margin:22px 0; }
+
+  .row-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:999px;
+    font-size:13px; font-weight:500; opacity:0; pointer-events:none; transition:all .25s ease; z-index:100;
+    box-shadow:0 8px 24px rgba(0,0,0,0.2);
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark"></span><h1>oreo</h1></div>
+    <div class="topbar-actions">
+      <button class="btn ghost" id="btnClear">지우기</button>
+      <button class="btn primary" id="btnDownload">이미지 저장</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+
+    <div class="preview-pane">
+      <div class="preview-frame" id="previewFrame">
+        <div class="preview-scale" id="previewScale">
+          <div id="canvas" class="canvas ratio-auto">
+            <div id="textBlock" class="text-block" contenteditable="true" spellcheck="false" data-placeholder="이곳을 눌러 문장을 입력하세요."></div>
+            <div id="creditLine" class="credit-line"></div>
+          </div>
+        </div>
+      </div>
+      <div class="canvas-meta">
+        <span id="dimLabel">- × - px</span>
+        <span class="dot"></span>
+        <span>탭하여 바로 편집 · 드래그로 선택 후 형광펜 적용</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <nav class="tabs">
+        <button class="tab active" data-tab="text">문장 설정</button>
+        <button class="tab" data-tab="canvas">캔버스 · 배경</button>
+      </nav>
+
+      <div class="tab-panels">
+
+        <!-- ===== TEXT TAB ===== -->
+        <section class="panel-section active" data-panel="text">
+
+          <p class="section-title">서체 &amp; 굵기</p>
+          <div class="field">
+            <select class="select" id="fontSelect">
+              <option value="'Pretendard', sans-serif">프리텐다드</option>
+              <option value="'KoPub Dotum', sans-serif">KoPub 돋움</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">본문 굵기</span></div>
+            <div class="seg" id="weightSeg">
+              <button data-value="300">얇게</button>
+              <button data-value="400" class="active">보통</button>
+              <button data-value="600">굵게</button>
+              <button data-value="800">매우 굵게</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">정렬 &amp; 줄바꿈</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">문장 정렬</span></div>
+            <div class="seg" id="alignSeg">
+              <button data-value="left" class="active">좌</button>
+              <button data-value="center">중</button>
+              <button data-value="right">우</button>
+              <button data-value="justify">양쪽</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">간격 디테일</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">크기</span><span class="field-value" id="sizeVal">26px</span></div>
+            <input type="range" id="sizeRange" min="8" max="72" step="1" value="26">
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">자간</span><span class="field-value" id="trackVal">0px</span></div>
+            <input type="range" id="trackRange" min="-4" max="12" step="0.5" value="0">
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">행간</span><span class="field-value" id="leadVal">40px</span></div>
+            <input type="range" id="leadRange" min="18" max="100" step="1" value="40">
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">문단 간격</span><span class="field-value" id="paraVal">16px</span></div>
+            <input type="range" id="paraRange" min="0" max="70" step="1" value="16">
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">장평</span><span class="field-value" id="skewVal">100%</span></div>
+            <input type="range" id="skewRange" min="80" max="120" step="1" value="100">
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">글자색</p>
+          <div class="field">
+            <div class="swatches" id="textColorSwatches">
+              <span class="swatch active" data-color="#201F1D" style="background:#201F1D"></span>
+              <span class="swatch" data-color="#5C5850" style="background:#5C5850"></span>
+              <span class="swatch" data-color="#33415C" style="background:#33415C"></span>
+              <span class="swatch" data-color="#B3554B" style="background:#B3554B"></span>
+              <span class="swatch" data-color="#FFFFFF" style="background:#FFFFFF"></span>
+              <input type="color" id="textColorCustom" value="#201f1d">
+            </div>
+          </div>
+
+          <p class="section-title">형광펜</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
+            <div class="swatches">
+              <span class="swatch" data-hl="#FFE066" style="background:#FFE066"></span>
+              <span class="swatch" data-hl="#FFB4C6" style="background:#FFB4C6"></span>
+              <span class="swatch" data-hl="#B7F0D4" style="background:#B7F0D4"></span>
+              <span class="swatch" data-hl="#BEE1FA" style="background:#BEE1FA"></span>
+              <span class="swatch" data-hl="#E3C6F7" style="background:#E3C6F7"></span>
+              <input type="color" id="hlCustom" value="#ffe066">
+            </div>
+            <div class="field-row" style="margin-top:12px;">
+              <button class="btn ghost" id="btnHlClear" style="padding:8px 12px; font-size:12.5px;">선택한 형광펜 지우기</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">출처 표기</p>
+          <div class="field">
+            <div class="credit-inputs">
+              <input type="text" id="creditCharacter" placeholder="캐릭터 이름" maxlength="40">
+              <input type="text" id="creditAuthor" placeholder="제작자" maxlength="40">
+            </div>
+            <p class="field-hint">입력하면 본문 하단에 작게 표시돼요. 비워두면 표시되지 않아요.</p>
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">출처 표기 크기</span><span class="field-value" id="creditSizeVal">13px</span></div>
+            <input type="range" id="creditSizeRange" min="8" max="40" step="1" value="13">
+          </div>
+
+        </section>
+
+        <!-- ===== CANVAS TAB ===== -->
+        <section class="panel-section" data-panel="canvas">
+
+          <p class="section-title">캔버스 비율</p>
+          <div class="field">
+            <div class="seg" id="ratioSeg">
+              <button data-value="auto" class="active">자동</button>
+              <button data-value="1:1">1:1</button>
+              <button data-value="4:5">4:5</button>
+              <button data-value="16:9">16:9</button>
+              <button data-value="9:16">9:16</button>
+            </div>
+            <p class="field-hint">자동은 문장 길이에 맞춰 배경 캔버스 크기가 조절돼요. 비율을 고르면 그 틀 안에 문장이 배치돼요.</p>
+          </div>
+
+          <div class="field">
+            <div class="field-row"><span class="field-label">지정 너비</span><span class="field-value" id="widthVal">620px</span></div>
+            <input type="range" id="widthRange" min="320" max="1080" step="10" value="620">
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">여백</p>
+          <div class="row-2">
+            <div class="field">
+              <div class="field-row"><span class="field-label">가로 여백</span><span class="field-value" id="marginHVal">48px</span></div>
+              <input type="range" id="marginHRange" min="0" max="160" step="2" value="48">
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">세로 여백</span><span class="field-value" id="marginVVal">64px</span></div>
+              <input type="range" id="marginVRange" min="0" max="200" step="2" value="64">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">배경</p>
+          <div class="field">
+            <div class="seg" id="bgTypeSeg">
+              <button data-value="solid" class="active">단색</button>
+              <button data-value="gradient">그라데이션</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-row"><span class="field-label">배경색 A</span></div>
+            <div class="swatches">
+              <span class="swatch active" data-bg="#F6F4EF" style="background:#F6F4EF"></span>
+              <span class="swatch" data-bg="#FFFFFF" style="background:#FFFFFF"></span>
+              <span class="swatch" data-bg="#22221F" style="background:#22221F"></span>
+              <span class="swatch" data-bg="#EFE6DA" style="background:#EFE6DA"></span>
+              <span class="swatch" data-bg="#33415C" style="background:#33415C"></span>
+              <input type="color" id="bgACustom" value="#f6f4ef">
+            </div>
+          </div>
+
+          <div id="bgBWrap" style="display:none;">
+            <div class="field">
+              <div class="field-row"><span class="field-label">배경색 B</span></div>
+              <div class="swatches">
+                <span class="swatch" data-bg2="#EFE9DD" style="background:#EFE9DD"></span>
+                <span class="swatch" data-bg2="#D8E4E1" style="background:#D8E4E1"></span>
+                <span class="swatch active" data-bg2="#33415C" style="background:#33415C"></span>
+                <span class="swatch" data-bg2="#0F0F0E" style="background:#0F0F0E"></span>
+                <span class="swatch" data-bg2="#F4C9B6" style="background:#F4C9B6"></span>
+                <input type="color" id="bgBCustom" value="#33415c">
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">그라데이션 각도</span><span class="field-value" id="angleVal">135°</span></div>
+              <input type="range" id="angleRange" min="0" max="360" step="1" value="135">
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+(function(){
+  const $ = (s, ctx) => (ctx||document).querySelector(s);
+  const $$ = (s, ctx) => Array.from((ctx||document).querySelectorAll(s));
+
+  const canvas = $('#canvas');
+  const textBlock = $('#textBlock');
+  const creditLine = $('#creditLine');
+  const dimLabel = $('#dimLabel');
+  const toast = $('#toast');
+  const previewFrame = $('#previewFrame');
+  const previewScale = $('#previewScale');
+
+  const state = {
+    font: "'Pretendard', sans-serif",
+    weight: 400,
+    align: 'left',
+    size: 26,
+    tracking: 0,
+    leading: 40,
+    paraGap: 16,
+    skew: 100,
+    textColor: '#201F1D',
+    ratio: 'auto',
+    width: 620,
+    marginH: 48,
+    marginV: 64,
+    bgType: 'solid',
+    bgA: '#F6F4EF',
+    bgB: '#33415C',
+    angle: 135,
+    creditCharacter: '',
+    creditAuthor: '',
+    creditSize: 13
+  };
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=> toast.classList.remove('show'), 1800);
+  }
+
+  /* ---------------- tabs ---------------- */
+  $$('.tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      $$('.tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const key = btn.dataset.tab;
+      $$('.panel-section').forEach(sec=> sec.classList.toggle('active', sec.dataset.panel===key));
+    });
+  });
+
+  /* ---------------- segmented helper ---------------- */
+  function bindSeg(id, onChange){
+    const seg = document.getElementById(id);
+    seg.addEventListener('click', (e)=>{
+      const b = e.target.closest('button');
+      if(!b) return;
+      $$('button', seg).forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      onChange(b.dataset.value);
+    });
+  }
+
+  bindSeg('weightSeg', v=>{ state.weight = +v; applyTextStyles(); });
+  bindSeg('alignSeg', v=>{ state.align = v; applyTextStyles(); });
+  bindSeg('ratioSeg', v=>{ state.ratio = v; updateCanvasSize(); });
+  bindSeg('bgTypeSeg', v=>{
+    state.bgType = v;
+    $('#bgBWrap').style.display = (v==='gradient') ? 'block' : 'none';
+    applyBackground();
+  });
+
+  /* ---------------- font ---------------- */
+  $('#fontSelect').addEventListener('change', e=>{
+    state.font = e.target.value;
+    applyTextStyles();
+  });
+
+  /* ---------------- ranges ---------------- */
+  function bindRange(id, valEl, suffix, key, cb){
+    const r = document.getElementById(id);
+    const v = document.getElementById(valEl);
+    r.addEventListener('input', ()=>{
+      state[key] = +r.value;
+      v.textContent = r.value + suffix;
+      cb();
+    });
+  }
+  bindRange('sizeRange','sizeVal','px','size', applyTextStyles);
+  bindRange('trackRange','trackVal','px','tracking', applyTextStyles);
+  bindRange('leadRange','leadVal','px','leading', applyTextStyles);
+  bindRange('paraRange','paraVal','px','paraGap', applyTextStyles);
+  bindRange('skewRange','skewVal','%','skew', applyTextStyles);
+  bindRange('widthRange','widthVal','px','width', updateCanvasSize);
+  bindRange('marginHRange','marginHVal','px','marginH', updateCanvasSize);
+  bindRange('marginVRange','marginVVal','px','marginV', updateCanvasSize);
+  bindRange('angleRange','angleVal','°','angle', applyBackground);
+
+  /* ---------------- text color swatches ---------------- */
+  $$('#textColorSwatches .swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      $$('#textColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      state.textColor = sw.dataset.color;
+      $('#textColorCustom').value = state.textColor;
+      applyTextStyles();
+    });
+  });
+  $('#textColorCustom').addEventListener('input', e=>{
+    $$('#textColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+    state.textColor = e.target.value;
+    applyTextStyles();
+  });
+
+  /* ---------------- background swatches ---------------- */
+  $$('[data-bg]').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      $$('[data-bg]').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      state.bgA = sw.dataset.bg;
+      $('#bgACustom').value = state.bgA;
+      applyBackground();
+    });
+  });
+  $('#bgACustom').addEventListener('input', e=>{
+    $$('[data-bg]').forEach(x=>x.classList.remove('active'));
+    state.bgA = e.target.value;
+    applyBackground();
+  });
+  $$('[data-bg2]').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      $$('[data-bg2]').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      state.bgB = sw.dataset.bg2;
+      $('#bgBCustom').value = state.bgB;
+      applyBackground();
+    });
+  });
+  $('#bgBCustom').addEventListener('input', e=>{
+    $$('[data-bg2]').forEach(x=>x.classList.remove('active'));
+    state.bgB = e.target.value;
+    applyBackground();
+  });
+
+  /* ---------------- highlighter ---------------- */
+  let savedRange = null;
+  function saveSelection(){
+    const sel = window.getSelection();
+    if(sel && sel.rangeCount>0){
+      const r = sel.getRangeAt(0);
+      if(textBlock.contains(r.commonAncestorContainer)) savedRange = r.cloneRange();
+    }
+  }
+  textBlock.addEventListener('mouseup', saveSelection);
+  textBlock.addEventListener('keyup', saveSelection);
+  textBlock.addEventListener('touchend', saveSelection);
+
+  function applyHighlight(color){
+    const sel = window.getSelection();
+    let range = (sel && sel.rangeCount>0 && !sel.isCollapsed && textBlock.contains(sel.getRangeAt(0).commonAncestorContainer)) ? sel.getRangeAt(0) : savedRange;
+    if(!range || range.collapsed){
+      showToast('먼저 문장을 드래그해서 선택해주세요');
+      return;
+    }
+    const mark = document.createElement('mark');
+    mark.style.backgroundColor = color;
+    mark.style.color = 'inherit';
+    try{
+      const frag = range.extractContents();
+      mark.appendChild(frag);
+      range.insertNode(mark);
+    }catch(e){ /* ignore */ }
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
+  }
+
+  $$('[data-hl]').forEach(sw=>{
+    sw.addEventListener('click', ()=> applyHighlight(sw.dataset.hl));
+  });
+  $('#hlCustom').addEventListener('input', e=> applyHighlight(e.target.value));
+
+  $('#btnHlClear').addEventListener('click', ()=>{
+    const sel = window.getSelection();
+    let range = (sel && sel.rangeCount>0 && !sel.isCollapsed && textBlock.contains(sel.getRangeAt(0).commonAncestorContainer)) ? sel.getRangeAt(0) : savedRange;
+    if(!range){ showToast('지울 형광펜 영역을 먼저 선택해주세요'); return; }
+    $$('mark', textBlock).forEach(mark=>{
+      if(range.intersectsNode(mark)){
+        const parent = mark.parentNode;
+        while(mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+        parent.removeChild(mark);
+      }
+    });
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
+  });
+
+  /* ---------------- credit line ---------------- */
+  function updateCredit(){
+    const c = state.creditCharacter.trim();
+    const a = state.creditAuthor.trim();
+    let text = '';
+    if(c && a) text = `${c} · ${a}`;
+    else text = c || a;
+    creditLine.textContent = text ? `| ${text}` : '';
+
+    creditLine.style.fontFamily = state.font;
+    creditLine.style.color = state.textColor;
+    creditLine.style.textAlign = state.align === 'justify' ? 'left' : state.align;
+    creditLine.style.fontSize = state.creditSize + 'px';
+    creditLine.style.marginTop = (text ? Math.max(10, Math.round(state.paraGap * 0.9)) : 0) + 'px';
+
+    updateCanvasSize();
+  }
+  $('#creditCharacter').addEventListener('input', e=>{ state.creditCharacter = e.target.value; updateCredit(); });
+  $('#creditAuthor').addEventListener('input', e=>{ state.creditAuthor = e.target.value; updateCredit(); });
+  bindRange('creditSizeRange','creditSizeVal','px','creditSize', updateCredit);
+
+  /* ---------------- text styling ---------------- */
+  function applyTextStyles(){
+    textBlock.style.fontFamily = state.font;
+    textBlock.style.fontWeight = state.weight;
+    textBlock.style.textAlign = state.align;
+    textBlock.style.fontSize = state.size + 'px';
+    textBlock.style.letterSpacing = state.tracking + 'px';
+    textBlock.style.lineHeight = state.leading + 'px';
+    textBlock.style.color = state.textColor;
+    textBlock.style.setProperty('--para-gap', state.paraGap + 'px');
+
+    const originMap = { left:'left top', center:'center top', right:'right top', justify:'left top' };
+    textBlock.style.transform = `scaleX(${state.skew/100})`;
+    textBlock.style.transformOrigin = originMap[state.align];
+
+    updateCredit();
+  }
+
+  /* ---------------- background ---------------- */
+  function applyBackground(){
+    if(state.bgType === 'solid'){
+      canvas.style.background = state.bgA;
+    } else {
+      canvas.style.background = `linear-gradient(${state.angle}deg, ${state.bgA}, ${state.bgB})`;
+    }
+  }
+
+  /* ---------------- canvas sizing ---------------- */
+  const ratioMap = {
+    '1:1': 1,
+    '4:5': 5/4,
+    '16:9': 9/16,
+    '9:16': 16/9
+  };
+
+  function updateCanvasSize(){
+    const mh = state.marginH, mv = state.marginV, w = state.width;
+    canvas.style.padding = mv + 'px ' + mh + 'px';
+    textBlock.style.width = '100%';
+
+    if(state.ratio === 'auto'){
+      canvas.classList.add('ratio-auto');
+      canvas.style.width = w + 'px';
+      canvas.style.height = 'auto';
+      canvas.style.overflow = 'visible';
+    } else {
+      canvas.classList.remove('ratio-auto');
+      const totalW = w + mh*2;
+      const totalH = Math.round(totalW * ratioMap[state.ratio]);
+      canvas.style.width = totalW + 'px';
+      canvas.style.height = totalH + 'px';
+      canvas.style.overflow = 'hidden';
+    }
+
+    requestAnimationFrame(updateFit);
+  }
+
+  function updateFit(){
+    const cw = canvas.offsetWidth;
+    const ch = canvas.offsetHeight;
+    if(!cw || !ch) return;
+
+    dimLabel.textContent = Math.round(cw) + ' × ' + Math.round(ch) + ' px';
+
+    const pad = 24;
+    const fw = Math.max(1, previewFrame.clientWidth - pad*2);
+    const fh = Math.max(1, previewFrame.clientHeight - pad*2);
+    let scale = Math.min(fw / cw, fh / ch);
+    scale = Math.min(scale, 2);
+    scale = Math.max(scale, 0.03);
+    previewScale.style.transform = `scale(${scale})`;
+  }
+
+  let fitResizeTimer = null;
+  function scheduleFit(){
+    clearTimeout(fitResizeTimer);
+    fitResizeTimer = setTimeout(updateFit, 60);
+  }
+  if(window.ResizeObserver){
+    new ResizeObserver(scheduleFit).observe(previewFrame);
+  }
+  window.addEventListener('resize', scheduleFit);
+  window.addEventListener('orientationchange', scheduleFit);
+
+  /* ---------------- placeholder handling ---------------- */
+  function refreshPlaceholder(){
+    const empty = textBlock.textContent.trim().length === 0;
+    textBlock.setAttribute('data-empty', empty ? 'true' : 'false');
+  }
+  textBlock.addEventListener('input', ()=>{ refreshPlaceholder(); updateCanvasSize(); });
+  textBlock.addEventListener('focus', ()=>{
+    document.execCommand && document.execCommand('defaultParagraphSeparator', false, 'div');
+  });
+
+  /* ---------------- clear ---------------- */
+  $('#btnClear').addEventListener('click', ()=>{
+    textBlock.innerHTML = '';
+    refreshPlaceholder();
+    updateCanvasSize();
+  });
+
+  /* ---------------- download ---------------- */
+  $('#btnDownload').addEventListener('click', async ()=>{
+    const btn = $('#btnDownload');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '생성 중…';
+    if(document.activeElement) document.activeElement.blur();
+    window.getSelection().removeAllRanges();
+
+    const prevTransform = previewScale.style.transform;
+    previewScale.style.transform = 'none';
+
+    try{
+      const shot = await html2canvas(canvas, {
+        backgroundColor: null,
+        scale: Math.min(3, (window.devicePixelRatio||1) * 2),
+        useCORS: true
+      });
+      previewScale.style.transform = prevTransform;
+
+      shot.toBlob(async (blob)=>{
+        if(!blob){ showToast('이미지 생성에 실패했어요'); btn.disabled=false; btn.textContent=original; return; }
+        const filename = `발췌_${Date.now()}.png`;
+
+        if(navigator.canShare && navigator.canShare({ files:[new File([blob], filename, {type:'image/png'})] })){
+          try{
+            await navigator.share({ files:[new File([blob], filename, {type:'image/png'})] });
+            btn.disabled=false; btn.textContent=original;
+            return;
+          }catch(shareErr){ /* fall through to download */ }
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=> URL.revokeObjectURL(url), 4000);
+        showToast('이미지가 저장되었어요');
+        btn.disabled = false;
+        btn.textContent = original;
+      }, 'image/png');
+
+    }catch(err){
+      previewScale.style.transform = prevTransform;
+      showToast('이미지 생성 중 문제가 발생했어요');
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+
+  /* ---------------- init ---------------- */
+  refreshPlaceholder();
+  applyTextStyles();
+  applyBackground();
+  updateCanvasSize();
+})();
+</script>
+</body>
+</html>
