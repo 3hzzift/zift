@@ -467,7 +467,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/modern-screenshot@4.6.8/dist/index.min.js"></script>
 <script>
 (function(){
   const $ = (s, ctx) => (ctx||document).querySelector(s);
@@ -849,37 +849,39 @@
     previewScale.style.transform = 'none';
 
     try{
-      const shot = await html2canvas(canvas, {
+      // modern-screenshot: DOM을 SVG <foreignObject>에 담아 브라우저가 직접
+      // 렌더링하게 한 뒤 캔버스로 옮기는 방식이라, 형광펜의 box-decoration-break
+      // (줄바꿈된 문장에 자연스럽게 이어지는 배경색) 같은 속성이 미리보기와
+      // 완전히 동일하게 캡처된다. (html2canvas는 이 속성을 지원하지 않아
+      // 여백을 잡아먹거나 문장이 잘리는 문제가 있었음)
+      const blob = await modernScreenshot.domToBlob(canvas, {
         backgroundColor: null,
-        scale: Math.min(3, (window.devicePixelRatio||1) * 2),
-        useCORS: true
+        scale: Math.min(3, (window.devicePixelRatio||1) * 2)
       });
       previewScale.style.transform = prevTransform;
 
-      shot.toBlob(async (blob)=>{
-        if(!blob){ showToast('이미지 생성에 실패했어요'); btn.disabled=false; btn.textContent=original; return; }
-        const filename = `발췌_${Date.now()}.png`;
+      if(!blob){ showToast('이미지 생성에 실패했어요'); btn.disabled=false; btn.textContent=original; return; }
+      const filename = `발췌_${Date.now()}.png`;
 
-        if(navigator.canShare && navigator.canShare({ files:[new File([blob], filename, {type:'image/png'})] })){
-          try{
-            await navigator.share({ files:[new File([blob], filename, {type:'image/png'})] });
-            btn.disabled=false; btn.textContent=original;
-            return;
-          }catch(shareErr){ /* fall through to download */ }
-        }
+      if(navigator.canShare && navigator.canShare({ files:[new File([blob], filename, {type:'image/png'})] })){
+        try{
+          await navigator.share({ files:[new File([blob], filename, {type:'image/png'})] });
+          btn.disabled=false; btn.textContent=original;
+          return;
+        }catch(shareErr){ /* fall through to download */ }
+      }
 
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(()=> URL.revokeObjectURL(url), 4000);
-        showToast('이미지가 저장되었어요');
-        btn.disabled = false;
-        btn.textContent = original;
-      }, 'image/png');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+      showToast('이미지가 저장되었어요');
+      btn.disabled = false;
+      btn.textContent = original;
 
     }catch(err){
       previewScale.style.transform = prevTransform;
