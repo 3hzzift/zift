@@ -102,6 +102,18 @@
     transition:transform .12s ease;
     will-change:transform;
   }
+  .preview-zoom{
+    display:flex; align-items:center; justify-content:center;
+    transform-origin:center center;
+    touch-action:none;
+  }
+  .zoom-reset-btn{
+    position:absolute; top:10px; right:10px; z-index:30;
+    border:1px solid var(--border); background:rgba(255,255,255,0.92);
+    color:var(--ink); padding:6px 13px; border-radius:999px;
+    font-size:11.5px; font-weight:600; cursor:pointer;
+  }
+  .zoom-reset-btn:active{ transform:scale(0.95); }
   .canvas{
     position:relative;
     display:flex; flex-direction:column; justify-content:center;
@@ -133,6 +145,8 @@
   .text-block > div:last-child{ margin-bottom:0; }
   .text-block mark{ padding:0.05em 0.15em; border-radius:2px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
   .text-block span.it{ font-style:italic; }
+  .text-block span.st{ text-decoration:line-through; }
+  .text-block span.ul{ text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; }
 
   .bubble-row{
     display:flex; width:100%;
@@ -145,7 +159,7 @@
     padding:0.65em 0.9em; border-radius:1.1em;
     font-size:0.92em; line-height:1.45;
     white-space:pre-wrap; word-break:keep-all; overflow-wrap:break-word;
-    cursor:pointer;
+    cursor:text; outline:none;
   }
   .bubble-row.dir-left .bubble{ border-bottom-left-radius:0.3em; }
   .bubble-row.dir-right .bubble{ border-bottom-right-radius:0.3em; }
@@ -201,6 +215,31 @@
     padding:8px 6px; border-radius:6px; font-size:12.5px; font-weight:600; cursor:pointer;
   }
   .seg button.active{ background:var(--accent); color:#fff; }
+
+  .format-btn-row{ display:flex; gap:8px; }
+  .format-btn{
+    flex:1; border:1px solid var(--border); background:var(--panel); color:var(--ink);
+    padding:10px 0; border-radius:8px; font-size:15px; cursor:pointer;
+    transition:transform .12s ease, background .12s ease, color .12s ease;
+  }
+  .format-btn:active{ transform:scale(0.95); }
+  .format-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .format-btn .fmt-i{ font-style:italic; font-weight:700; }
+  .format-btn .fmt-s{ text-decoration:line-through; font-weight:700; }
+  .format-btn .fmt-u{ text-decoration:underline; text-underline-offset:2px; font-weight:700; }
+
+  .accordion-head{
+    width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    border:none; background:transparent; padding:0; margin:0 0 14px; cursor:pointer; text-align:left;
+  }
+  .accordion-caret{
+    display:flex; align-items:center; justify-content:center;
+    width:20px; height:20px; flex:none; color:var(--muted);
+    transition:transform .18s ease;
+  }
+  .accordion-caret svg{ width:12px; height:12px; }
+  .accordion.collapsed .accordion-caret{ transform:rotate(-90deg); }
+  .accordion.collapsed .accordion-body{ display:none; }
 
   .swatches{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .swatch{
@@ -287,18 +326,21 @@
     <div class="preview-pane">
       <div class="preview-frame" id="previewFrame">
         <div class="preview-scale" id="previewScale">
-          <div id="canvas" class="canvas ratio-auto">
-            <div id="bgImageLayer" class="bg-image-layer"></div>
-            <div id="bgDarkOverlay" class="bg-dark-overlay"></div>
-            <div id="textBlock" class="text-block" contenteditable="true" spellcheck="false" data-placeholder="이곳을 눌러 문장을 입력하세요."></div>
-            <div id="creditLine" class="credit-line"></div>
+          <div class="preview-zoom" id="previewZoom">
+            <div id="canvas" class="canvas ratio-auto">
+              <div id="bgImageLayer" class="bg-image-layer"></div>
+              <div id="bgDarkOverlay" class="bg-dark-overlay"></div>
+              <div id="textBlock" class="text-block" contenteditable="true" spellcheck="false" data-placeholder="이곳을 눌러 문장을 입력하세요."></div>
+              <div id="creditLine" class="credit-line"></div>
+            </div>
           </div>
         </div>
+        <button type="button" class="zoom-reset-btn" id="zoomResetBtn" style="display:none;">축소</button>
       </div>
       <div class="canvas-meta">
         <span id="dimLabel">- × - px</span>
         <span class="dot"></span>
-        <span>탭하여 바로 편집 · 드래그로 선택 후 형광펜 적용</span>
+        <span>탭하여 바로 편집</span>
       </div>
     </div>
 
@@ -343,6 +385,15 @@
               <button data-value="800">매우 굵게</button>
             </div>
           </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">기울임 · 취소선 · 강조선</span></div>
+            <div class="format-btn-row">
+              <button class="format-btn" id="btnToggleItalic" aria-label="기울임 적용·해제"><span class="fmt-i">I</span></button>
+              <button class="format-btn" id="btnToggleStrike" aria-label="취소선 적용·해제"><span class="fmt-s">S</span></button>
+              <button class="format-btn" id="btnToggleUnderline" aria-label="강조선 적용·해제"><span class="fmt-u">U</span></button>
+            </div>
+            <p class="field-hint">문장을 드래그로 선택한 뒤 눌러 적용하고, 다시 누르면 해제돼요.</p>
+          </div>
 
           <div class="divider"></div>
 
@@ -383,60 +434,72 @@
 
           <div class="divider"></div>
 
-          <p class="section-title">글자색</p>
-          <div class="field">
-            <div class="swatches" id="textColorSwatches">
-              <span class="swatch active" data-color="#201F1D" style="background:#201F1D"></span>
-              <span class="swatch" data-color="#5C5850" style="background:#5C5850"></span>
-              <span class="swatch" data-color="#33415C" style="background:#33415C"></span>
-              <span class="swatch" data-color="#B3554B" style="background:#B3554B"></span>
-              <span class="swatch" data-color="#FFFFFF" style="background:#FFFFFF"></span>
-              <input type="color" id="textColorCustom" value="#201f1d">
-            </div>
-          </div>
+          <div class="accordion collapsed" id="colorAccordion">
+            <button type="button" class="accordion-head" id="colorAccordionHead" aria-expanded="false">
+              <span class="section-title" style="margin:0;">글자색 · 형광펜 · 강조선 색</span>
+              <span class="accordion-caret">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </span>
+            </button>
+            <div class="accordion-body" id="colorAccordionBody">
 
-          <p class="section-title">형광펜</p>
-          <div class="field">
-            <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
-            <div class="swatches">
-              <span class="swatch" data-hl="#FFE066" style="background:#FFE066"></span>
-              <span class="swatch" data-hl="#FFB4C6" style="background:#FFB4C6"></span>
-              <span class="swatch" data-hl="#B7F0D4" style="background:#B7F0D4"></span>
-              <span class="swatch" data-hl="#BEE1FA" style="background:#BEE1FA"></span>
-              <span class="swatch" data-hl="#E3C6F7" style="background:#E3C6F7"></span>
-              <input type="color" id="hlCustom" value="#ffe066">
-            </div>
-            <div class="field-row" style="margin-top:12px;">
-              <button class="btn ghost" id="btnHlClear" style="padding:8px 12px; font-size:12.5px;">선택한 형광펜 지우기</button>
-            </div>
-          </div>
+              <p class="section-title">글자색</p>
+              <div class="field">
+                <div class="swatches" id="textColorSwatches">
+                  <span class="swatch active" data-color="#201F1D" style="background:#201F1D"></span>
+                  <span class="swatch" data-color="#5C5850" style="background:#5C5850"></span>
+                  <span class="swatch" data-color="#33415C" style="background:#33415C"></span>
+                  <span class="swatch" data-color="#B3554B" style="background:#B3554B"></span>
+                  <span class="swatch" data-color="#FFFFFF" style="background:#FFFFFF"></span>
+                  <input type="color" id="textColorCustom" value="#201f1d">
+                </div>
+              </div>
 
-          <div class="divider"></div>
+              <p class="section-title">형광펜</p>
+              <div class="field">
+                <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
+                <div class="swatches">
+                  <span class="swatch" data-hl="#FFE066" style="background:#FFE066"></span>
+                  <span class="swatch" data-hl="#FFB4C6" style="background:#FFB4C6"></span>
+                  <span class="swatch" data-hl="#B7F0D4" style="background:#B7F0D4"></span>
+                  <span class="swatch" data-hl="#BEE1FA" style="background:#BEE1FA"></span>
+                  <span class="swatch" data-hl="#E3C6F7" style="background:#E3C6F7"></span>
+                  <input type="color" id="hlCustom" value="#ffe066">
+                </div>
+                <div class="field-row" style="margin-top:12px;">
+                  <button class="btn ghost" id="btnHlClear" style="padding:8px 12px; font-size:12.5px;">선택한 형광펜 지우기</button>
+                </div>
+              </div>
 
-          <p class="section-title">부분 글자색</p>
-          <div class="field">
-            <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
-            <div class="swatches">
-              <span class="swatch" data-tc="#E5342B" style="background:#E5342B"></span>
-              <span class="swatch" data-tc="#1E6FE0" style="background:#1E6FE0"></span>
-              <span class="swatch" data-tc="#111111" style="background:#111111"></span>
-              <span class="swatch" data-tc="#8A8A8A" style="background:#8A8A8A"></span>
-              <span class="swatch" data-tc="#FFFFFF" style="background:#FFFFFF"></span>
-              <input type="color" id="tcCustom" value="#e5342b">
-            </div>
-            <div class="field-row" style="margin-top:12px;">
-              <button class="btn ghost" id="btnTcClear" style="padding:8px 12px; font-size:12.5px;">선택한 글자색 지우기</button>
-            </div>
-          </div>
+              <p class="section-title">부분 글자색</p>
+              <div class="field">
+                <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
+                <div class="swatches">
+                  <span class="swatch" data-tc="#E5342B" style="background:#E5342B"></span>
+                  <span class="swatch" data-tc="#1E6FE0" style="background:#1E6FE0"></span>
+                  <span class="swatch" data-tc="#111111" style="background:#111111"></span>
+                  <span class="swatch" data-tc="#8A8A8A" style="background:#8A8A8A"></span>
+                  <span class="swatch" data-tc="#FFFFFF" style="background:#FFFFFF"></span>
+                  <input type="color" id="tcCustom" value="#e5342b">
+                </div>
+                <div class="field-row" style="margin-top:12px;">
+                  <button class="btn ghost" id="btnTcClear" style="padding:8px 12px; font-size:12.5px;">선택한 글자색 지우기</button>
+                </div>
+              </div>
 
-          <div class="divider"></div>
+              <p class="section-title">강조선 색</p>
+              <div class="field">
+                <div class="field-row"><span class="field-label">강조선(밑줄)에 적용할 색을 선택하세요</span></div>
+                <div class="swatches" id="underlineColorSwatches">
+                  <span class="swatch active" data-uc="#E5342B" style="background:#E5342B"></span>
+                  <span class="swatch" data-uc="#1E6FE0" style="background:#1E6FE0"></span>
+                  <span class="swatch" data-uc="#111111" style="background:#111111"></span>
+                  <span class="swatch" data-uc="#FFE066" style="background:#FFE066"></span>
+                  <input type="color" id="ucCustom" value="#e5342b">
+                </div>
+                <p class="field-hint">색을 바꾸면 이미 적용된 강조선까지 한 번에 바뀌어요.</p>
+              </div>
 
-          <p class="section-title">기울임</p>
-          <div class="field">
-            <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 적용해주세요</span></div>
-            <div class="field-row" style="margin-top:10px; gap:8px;">
-              <button class="btn ghost" id="btnItalicApply" style="flex:1; padding:8px 12px; font-size:12.5px;">기울임 적용</button>
-              <button class="btn ghost" id="btnItalicClear" style="flex:1; padding:8px 12px; font-size:12.5px;">기울임 해제</button>
             </div>
           </div>
 
@@ -598,6 +661,8 @@
   const toast = $('#toast');
   const previewFrame = $('#previewFrame');
   const previewScale = $('#previewScale');
+  const previewZoom = $('#previewZoom');
+  const zoomResetBtn = $('#zoomResetBtn');
 
   const state = {
     font: "'Pretendard', sans-serif",
@@ -846,38 +911,66 @@
     updateCanvasSize();
   });
 
-  /* ---------------- italic ---------------- */
-  $('#btnItalicApply').addEventListener('click', ()=>{
+  /* ---------------- italic / strikethrough / underline (toggle) ----------------
+     Each button applies the format to the current selection, or removes it if
+     the selection already overlaps that format — single button, no separate
+     apply/clear controls. */
+  let lastUnderlineColor = '#E5342B';
+
+  function toggleInlineFormat(className, styleFn){
     const range = getSelRange();
     if(!range || range.collapsed){
       showToast('먼저 문장을 드래그해서 선택해주세요');
       return;
     }
-    const span = document.createElement('span');
-    span.className = 'it';
-    try{
-      const frag = range.extractContents();
-      span.appendChild(frag);
-      range.insertNode(span);
-    }catch(e){ /* ignore */ }
+    const selector = 'span.' + className;
+    const hasFormat = $$(selector, textBlock).some(span => range.intersectsNode(span));
+
+    if(hasFormat){
+      $$(selector, textBlock).forEach(span=>{
+        if(range.intersectsNode(span)){
+          const parent = span.parentNode;
+          while(span.firstChild) parent.insertBefore(span.firstChild, span);
+          parent.removeChild(span);
+        }
+      });
+    } else {
+      const span = document.createElement('span');
+      span.className = className;
+      if(styleFn) styleFn(span);
+      try{
+        const frag = range.extractContents();
+        span.appendChild(frag);
+        range.insertNode(span);
+      }catch(e){ /* ignore */ }
+    }
     window.getSelection().removeAllRanges();
     savedRange = null;
     updateCanvasSize();
+  }
+
+  $('#btnToggleItalic').addEventListener('click', ()=> toggleInlineFormat('it'));
+  $('#btnToggleStrike').addEventListener('click', ()=> toggleInlineFormat('st'));
+  $('#btnToggleUnderline').addEventListener('click', ()=>{
+    toggleInlineFormat('ul', span=>{ span.style.textDecorationColor = lastUnderlineColor; });
   });
 
-  $('#btnItalicClear').addEventListener('click', ()=>{
-    const range = getSelRange();
-    if(!range){ showToast('해제할 영역을 먼저 선택해주세요'); return; }
-    $$('span.it', textBlock).forEach(span=>{
-      if(range.intersectsNode(span)){
-        const parent = span.parentNode;
-        while(span.firstChild) parent.insertBefore(span.firstChild, span);
-        parent.removeChild(span);
-      }
+  function applyUnderlineColorToAll(color){
+    lastUnderlineColor = color;
+    $$('span.ul', textBlock).forEach(span=>{ span.style.textDecorationColor = color; });
+  }
+
+  $$('#underlineColorSwatches .swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      $$('#underlineColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      $('#ucCustom').value = sw.dataset.uc;
+      applyUnderlineColorToAll(sw.dataset.uc);
     });
-    window.getSelection().removeAllRanges();
-    savedRange = null;
-    updateCanvasSize();
+  });
+  $('#ucCustom').addEventListener('input', e=>{
+    $$('#underlineColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+    applyUnderlineColorToAll(e.target.value);
   });
 
   /* ---------------- chat bubble ---------------- */
@@ -896,6 +989,7 @@
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
+    bubble.contentEditable = 'true';
     bubble.style.background = lastBubbleColor;
     bubble.dataset.color = lastBubbleColor;
 
@@ -970,7 +1064,11 @@
   $('#btnBubbleDelete').addEventListener('click', ()=>{
     if(!selectedBubble) return;
     const row = selectedBubble.closest('.bubble-row');
-    row.remove();
+    // Only remove the bubble wrapper — keep the sentence itself in the body.
+    const wrapper = document.createElement('div');
+    while(selectedBubble.firstChild) wrapper.appendChild(selectedBubble.firstChild);
+    if(!wrapper.hasChildNodes()) wrapper.appendChild(document.createElement('br'));
+    row.replaceWith(wrapper);
     selectedBubble = null;
     $('#bubbleEditWrap').style.display = 'none';
     refreshPlaceholder();
@@ -1118,6 +1216,59 @@
   window.addEventListener('resize', scheduleFit);
   window.addEventListener('orientationchange', scheduleFit);
 
+  /* ---------------- pinch-to-zoom (mobile preview) ----------------
+     Independent of the auto-fit scale above: two-finger pinch lets the
+     person zoom into the preview to check detail. Single-finger touches
+     are left untouched so tap-to-edit and text selection keep working. */
+  let zoomScale = 1, zoomX = 0, zoomY = 0;
+  let pinchStartDist = 0, pinchStartScale = 1, pinchStartMid = {x:0,y:0}, pinchStartZ = {x:0,y:0};
+
+  function touchDist(a, b){
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  }
+  function touchMid(a, b){
+    return { x:(a.clientX + b.clientX) / 2, y:(a.clientY + b.clientY) / 2 };
+  }
+  function applyZoomTransform(){
+    previewZoom.style.transform = `translate(${zoomX}px, ${zoomY}px) scale(${zoomScale})`;
+    zoomResetBtn.style.display = zoomScale > 1.02 ? 'block' : 'none';
+  }
+
+  previewFrame.addEventListener('touchstart', (e)=>{
+    if(e.touches.length === 2){
+      e.preventDefault();
+      pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+      pinchStartScale = zoomScale;
+      pinchStartMid = touchMid(e.touches[0], e.touches[1]);
+      pinchStartZ = { x:zoomX, y:zoomY };
+    }
+  }, { passive:false });
+
+  previewFrame.addEventListener('touchmove', (e)=>{
+    if(e.touches.length === 2){
+      e.preventDefault();
+      const dist = touchDist(e.touches[0], e.touches[1]);
+      const ratio = dist / (pinchStartDist || dist);
+      zoomScale = Math.min(4, Math.max(1, pinchStartScale * ratio));
+      const mid = touchMid(e.touches[0], e.touches[1]);
+      zoomX = pinchStartZ.x + (mid.x - pinchStartMid.x);
+      zoomY = pinchStartZ.y + (mid.y - pinchStartMid.y);
+      applyZoomTransform();
+    }
+  }, { passive:false });
+
+  previewFrame.addEventListener('touchend', (e)=>{
+    if(e.touches.length < 2 && zoomScale <= 1.02){
+      zoomScale = 1; zoomX = 0; zoomY = 0;
+      applyZoomTransform();
+    }
+  });
+
+  zoomResetBtn.addEventListener('click', ()=>{
+    zoomScale = 1; zoomX = 0; zoomY = 0;
+    applyZoomTransform();
+  });
+
   /* ---------------- placeholder handling ---------------- */
   function refreshPlaceholder(){
     const empty = textBlock.textContent.trim().length === 0;
@@ -1251,6 +1402,10 @@
     const prevTransition = previewScale.style.transition;
     previewScale.style.transition = 'none';
     previewScale.style.transform = 'none';
+    // The pinch-zoom layer must also be neutralized during capture, or a
+    // zoomed-in preview would export cropped/offset instead of the full canvas.
+    const prevZoomTransform = previewZoom.style.transform;
+    previewZoom.style.transform = 'none';
     void previewScale.offsetHeight; // force layout flush before measuring
 
     let hlState = null;
@@ -1266,6 +1421,7 @@
       teardownExportHighlightLayer(hlState);
       hlState = null;
       previewScale.style.transform = prevTransform;
+      previewZoom.style.transform = prevZoomTransform;
       void previewScale.offsetHeight;
       previewScale.style.transition = prevTransition;
 
@@ -1297,6 +1453,7 @@
     }catch(err){
       if(hlState) teardownExportHighlightLayer(hlState);
       previewScale.style.transform = prevTransform;
+      previewZoom.style.transform = prevZoomTransform;
       void previewScale.offsetHeight;
       previewScale.style.transition = prevTransition;
       showToast('이미지 생성 중 문제가 발생했어요');
@@ -1353,6 +1510,17 @@
     head.addEventListener('click', toggle);
     head.addEventListener('keydown', (e)=>{
       if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+    });
+  })();
+
+  /* ---------------- color/highlighter/underline: collapse toggle ---------------- */
+  (function(){
+    const acc = $('#colorAccordion');
+    const head = $('#colorAccordionHead');
+    if(!acc || !head) return;
+    head.addEventListener('click', ()=>{
+      const collapsed = acc.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     });
   })();
 
