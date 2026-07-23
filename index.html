@@ -36,6 +36,77 @@
   input[type="color"]::-webkit-color-swatch-wrapper{ padding:0; border-radius:50%; }
   input[type="color"]::-webkit-color-swatch{ border:none; border-radius:50%; }
 
+  /* ---------- custom color picker (replaces native <input type=color>) ---------- */
+  .cp-trigger{
+    position:relative; width:34px; height:34px; border-radius:50%; flex:none;
+    border:none; padding:0; cursor:pointer;
+    background:conic-gradient(from 0deg, #f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);
+    box-shadow:0 0 0 1px var(--border);
+  }
+  .cp-trigger::after{
+    content:''; position:absolute; inset:4px; border-radius:50%;
+    background:var(--cp-color, #ffffff); border:2px solid var(--panel);
+  }
+  .cp-trigger:active{ transform:scale(0.94); }
+
+  .cp-backdrop{
+    position:fixed; inset:0; z-index:200; background:rgba(17,17,17,0.42);
+    display:none; opacity:0; transition:opacity .18s ease;
+  }
+  .cp-backdrop.open{ display:block; opacity:1; }
+
+  .cp-modal{
+    position:fixed; left:50%; bottom:0; z-index:201;
+    width:min(92vw, 360px);
+    background:var(--paper); border-radius:18px 18px 0 0;
+    box-shadow:0 -12px 34px rgba(17,17,17,0.2);
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    display:none;
+    transform:translate(-50%, 100%);
+    transition:transform .22s cubic-bezier(.2,.85,.25,1);
+  }
+  .cp-modal.open{ display:block; transform:translate(-50%, 0); }
+  @media (min-width:560px){
+    .cp-modal{ bottom:auto; top:50%; border-radius:18px; transform:translate(-50%, -42%); }
+    .cp-modal.open{ transform:translate(-50%, -50%); }
+  }
+  .cp-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .cp-title{ font-size:14px; font-weight:700; }
+  .cp-close{ border:none; background:transparent; color:var(--muted); padding:4px; cursor:pointer; line-height:0; }
+  .cp-close svg{ width:18px; height:18px; }
+
+  .cp-sv{
+    position:relative; width:100%; height:160px; border-radius:12px; overflow:hidden;
+    cursor:crosshair; touch-action:none; margin-bottom:14px;
+    background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
+  }
+  .cp-sv-cursor{
+    position:absolute; width:16px; height:16px; border-radius:50%;
+    border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.3);
+    transform:translate(-50%, -50%); pointer-events:none; left:0%; top:0%;
+  }
+  .cp-hue{
+    position:relative; width:100%; height:16px; border-radius:8px; overflow:hidden;
+    cursor:pointer; touch-action:none; margin-bottom:16px;
+    background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  }
+  .cp-hue-cursor{
+    position:absolute; top:50%; width:18px; height:18px; border-radius:50%;
+    background:#fff; border:2px solid var(--panel); box-shadow:0 0 0 1px var(--border), 0 1px 4px rgba(0,0,0,0.25);
+    transform:translate(-50%, -50%); pointer-events:none; left:0%;
+  }
+  .cp-hex-row{
+    display:flex; align-items:center; gap:9px;
+    border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin-bottom:16px;
+  }
+  .cp-preview{ width:24px; height:24px; border-radius:50%; box-shadow:0 0 0 1px var(--border); flex:none; }
+  .cp-hex-prefix{ color:var(--muted); font-weight:600; font-size:14px; }
+  #cpHexInput{
+    flex:1; min-width:0; border:none; outline:none; font-size:15px; letter-spacing:.03em;
+    font-family:inherit; text-transform:uppercase; color:var(--ink); background:transparent;
+  }
+  .cp-done{ width:100%; padding:11px 0; font-size:13.5px; }
+
   .app{ max-width:1180px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
 
   /* ---------- topbar ---------- */
@@ -144,9 +215,13 @@
   .text-block > div{ margin:0 0 var(--para-gap,16px) 0; }
   .text-block > div:last-child{ margin-bottom:0; }
   .text-block mark{ padding:0.05em 0.15em; border-radius:2px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+  .text-block span.b{ font-weight:800; }
   .text-block span.it{ font-style:italic; }
   .text-block span.st{ text-decoration:line-through; }
   .text-block span.ul{ text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; }
+  .text-block span.qt{ font-style:italic; color:var(--muted); }
+  .text-block span.qt::before{ content:'“'; font-style:normal; }
+  .text-block span.qt::after{ content:'”'; font-style:normal; }
 
   .bubble-row{
     display:flex; width:100%;
@@ -188,16 +263,67 @@
   .panel{ background:var(--paper); }
   @media (min-width:900px){ .panel{ flex:1 1 42%; max-height:calc(100vh - 57px); overflow:auto; } }
 
+  .sheet-handle{ display:none; }
+
+  /* ---------- mobile bottom sheet ----------
+     Below 900px the panel becomes a draggable bottom sheet that overlays
+     the preview area; the preview pane shrinks to fill exactly the space
+     left above it (see --sheet-h, set by JS in the pinch/drag section). */
+  @media (max-width:899px){
+    html,body{ height:100%; overflow:hidden; }
+    .app{ height:100vh; min-height:0; }
+    .workspace{ flex:1; min-height:0; position:relative; overflow:hidden; }
+
+    .preview-pane{
+      position:static;
+      height:calc(100% - var(--sheet-h, 46vh));
+      width:100%;
+      display:flex; flex-direction:column; align-items:stretch; justify-content:center;
+      border-bottom:none;
+    }
+    .preview-frame{
+      flex:1; min-height:120px; height:auto; max-height:none;
+    }
+    .canvas-meta{ flex:none; }
+
+    .panel{
+      position:fixed; left:0; right:0; bottom:0; z-index:60;
+      display:flex; flex-direction:column;
+      height:var(--sheet-h, 46vh);
+      max-height:92vh; min-height:180px;
+      border-top-left-radius:20px; border-top-right-radius:20px;
+      box-shadow:0 -10px 34px rgba(17,17,17,0.14);
+      padding-bottom:env(safe-area-inset-bottom);
+    }
+    .panel:not(.dragging){ transition:height .3s cubic-bezier(.2,.85,.25,1); }
+
+    .sheet-handle{
+      display:flex; align-items:center; justify-content:center;
+      flex:none; padding:9px 0 4px; cursor:grab; touch-action:none;
+    }
+    .sheet-handle-bar{ width:36px; height:4px; border-radius:2px; background:var(--border); }
+
+    .tabs{ position:static; flex:none; }
+
+    .panel-scroll{ flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  }
+
   .tabs{
     position:sticky; top:0; z-index:10;
     display:flex; gap:4px; padding:10px 14px; background:var(--paper);
     border-bottom:1px solid var(--border);
   }
-  @media (min-width:900px){ .tabs{ top:0; } }
-  .tab{
-    flex:1; border:none; background:transparent; color:var(--muted);
-    padding:9px 10px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;
+  @media (min-width:900px){
+    .tabs{ top:0; }
+    .tab{ flex-direction:row; gap:0; padding:9px 10px; font-size:13px; border-radius:8px; }
+    .tab svg{ display:none; }
   }
+  .tab{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    border:none; background:transparent; color:var(--muted);
+    padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer;
+  }
+  .tab svg{ width:19px; height:19px; }
   .tab.active{ background:var(--panel); color:var(--ink); box-shadow:0 0 0 1px var(--border); }
 
   .panel-section{ display:none; padding:18px 16px 100px; }
@@ -224,9 +350,11 @@
   }
   .format-btn:active{ transform:scale(0.95); }
   .format-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .format-btn .fmt-b{ font-weight:800; }
   .format-btn .fmt-i{ font-style:italic; font-weight:700; }
   .format-btn .fmt-s{ text-decoration:line-through; font-weight:700; }
   .format-btn .fmt-u{ text-decoration:underline; text-underline-offset:2px; font-weight:700; }
+  .format-btn .fmt-q{ font-weight:800; font-family:Georgia, 'Times New Roman', serif; }
 
   .accordion-head{
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -344,11 +472,23 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="panel">
+      <div class="sheet-handle" id="sheetHandle" role="button" tabindex="0" aria-label="패널 크기 조절, 위아래로 드래그하거나 눌러서 전환">
+        <span class="sheet-handle-bar"></span>
+      </div>
+
       <nav class="tabs">
-        <button class="tab active" data-tab="text">문장 설정</button>
-        <button class="tab" data-tab="canvas">캔버스 · 배경</button>
+        <button class="tab active" data-tab="text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="16" y2="12"></line><line x1="4" y1="17" x2="12" y2="17"></line></svg>
+          <span>문장 설정</span>
+        </button>
+        <button class="tab" data-tab="canvas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M3 16l5.5-5.5a1.5 1.5 0 0 1 2.1 0L17 17"></path></svg>
+          <span>캔버스 · 배경</span>
+        </button>
       </nav>
+
+      <div class="panel-scroll" id="panelScroll">
 
       <div class="preset-bar" id="presetBar">
         <div class="preset-head" id="presetHead" role="button" tabindex="0" aria-expanded="true">
@@ -386,11 +526,13 @@
             </div>
           </div>
           <div class="field">
-            <div class="field-row"><span class="field-label">기울임 · 취소선 · 강조선</span></div>
+            <div class="field-row"><span class="field-label">부분 서식</span></div>
             <div class="format-btn-row">
+              <button class="format-btn" id="btnToggleBold" aria-label="굵게 적용·해제"><span class="fmt-b">B</span></button>
               <button class="format-btn" id="btnToggleItalic" aria-label="기울임 적용·해제"><span class="fmt-i">I</span></button>
               <button class="format-btn" id="btnToggleStrike" aria-label="취소선 적용·해제"><span class="fmt-s">S</span></button>
               <button class="format-btn" id="btnToggleUnderline" aria-label="강조선 적용·해제"><span class="fmt-u">U</span></button>
+              <button class="format-btn" id="btnToggleQuote" aria-label="인용구 적용·해제"><span class="fmt-q">"</span></button>
             </div>
             <p class="field-hint">문장을 드래그로 선택한 뒤 눌러 적용하고, 다시 누르면 해제돼요.</p>
           </div>
@@ -451,7 +593,7 @@
                   <span class="swatch" data-color="#33415C" style="background:#33415C"></span>
                   <span class="swatch" data-color="#B3554B" style="background:#B3554B"></span>
                   <span class="swatch" data-color="#FFFFFF" style="background:#FFFFFF"></span>
-                  <input type="color" id="textColorCustom" value="#201f1d">
+                  <input type="hidden" id="textColorCustom" value="#201f1d"><button type="button" class="cp-trigger" data-for="textColorCustom" aria-label="글자색 직접 선택"></button>
                 </div>
               </div>
 
@@ -464,7 +606,7 @@
                   <span class="swatch" data-hl="#B7F0D4" style="background:#B7F0D4"></span>
                   <span class="swatch" data-hl="#BEE1FA" style="background:#BEE1FA"></span>
                   <span class="swatch" data-hl="#E3C6F7" style="background:#E3C6F7"></span>
-                  <input type="color" id="hlCustom" value="#ffe066">
+                  <input type="hidden" id="hlCustom" value="#ffe066"><button type="button" class="cp-trigger" data-for="hlCustom" aria-label="형광펜 색 직접 선택"></button>
                 </div>
                 <div class="field-row" style="margin-top:12px;">
                   <button class="btn ghost" id="btnHlClear" style="padding:8px 12px; font-size:12.5px;">선택한 형광펜 지우기</button>
@@ -480,7 +622,7 @@
                   <span class="swatch" data-tc="#111111" style="background:#111111"></span>
                   <span class="swatch" data-tc="#8A8A8A" style="background:#8A8A8A"></span>
                   <span class="swatch" data-tc="#FFFFFF" style="background:#FFFFFF"></span>
-                  <input type="color" id="tcCustom" value="#e5342b">
+                  <input type="hidden" id="tcCustom" value="#e5342b"><button type="button" class="cp-trigger" data-for="tcCustom" aria-label="부분 글자색 직접 선택"></button>
                 </div>
                 <div class="field-row" style="margin-top:12px;">
                   <button class="btn ghost" id="btnTcClear" style="padding:8px 12px; font-size:12.5px;">선택한 글자색 지우기</button>
@@ -495,7 +637,7 @@
                   <span class="swatch" data-uc="#1E6FE0" style="background:#1E6FE0"></span>
                   <span class="swatch" data-uc="#111111" style="background:#111111"></span>
                   <span class="swatch" data-uc="#FFE066" style="background:#FFE066"></span>
-                  <input type="color" id="ucCustom" value="#e5342b">
+                  <input type="hidden" id="ucCustom" value="#e5342b"><button type="button" class="cp-trigger" data-for="ucCustom" aria-label="강조선 색 직접 선택"></button>
                 </div>
                 <p class="field-hint">색을 바꾸면 이미 적용된 강조선까지 한 번에 바뀌어요.</p>
               </div>
@@ -523,7 +665,7 @@
               <span class="swatch" data-bubble="#AEDBFB" style="background:#AEDBFB"></span>
               <span class="swatch" data-bubble="#111111" style="background:#111111"></span>
               <span class="swatch" data-bubble="#FFFFFF" style="background:#FFFFFF"></span>
-              <input type="color" id="bubbleColorCustom" value="#2f6fed">
+              <input type="hidden" id="bubbleColorCustom" value="#2f6fed"><button type="button" class="cp-trigger" data-for="bubbleColorCustom" aria-label="말풍선 색 직접 선택"></button>
             </div>
             <div class="field-row" style="margin-top:14px;">
               <button class="btn ghost" id="btnBubbleDelete" style="width:100%; padding:9px 12px; font-size:12.5px; color:var(--danger);">이 말풍선 삭제</button>
@@ -616,7 +758,7 @@
               <span class="swatch" data-bg="#22221F" style="background:#22221F"></span>
               <span class="swatch" data-bg="#EFE6DA" style="background:#EFE6DA"></span>
               <span class="swatch" data-bg="#33415C" style="background:#33415C"></span>
-              <input type="color" id="bgACustom" value="#f6f4ef">
+              <input type="hidden" id="bgACustom" value="#f6f4ef"><button type="button" class="cp-trigger" data-for="bgACustom" aria-label="배경색 A 직접 선택"></button>
             </div>
           </div>
 
@@ -629,7 +771,7 @@
                 <span class="swatch active" data-bg2="#33415C" style="background:#33415C"></span>
                 <span class="swatch" data-bg2="#0F0F0E" style="background:#0F0F0E"></span>
                 <span class="swatch" data-bg2="#F4C9B6" style="background:#F4C9B6"></span>
-                <input type="color" id="bgBCustom" value="#33415c">
+                <input type="hidden" id="bgBCustom" value="#33415c"><button type="button" class="cp-trigger" data-for="bgBCustom" aria-label="배경색 B 직접 선택"></button>
               </div>
             </div>
             <div class="field">
@@ -641,9 +783,33 @@
         </section>
 
       </div>
+
+      </div>
     </div>
 
   </div>
+</div>
+
+<div class="cp-backdrop" id="cpBackdrop"></div>
+<div class="cp-modal" id="cpModal" role="dialog" aria-modal="true" aria-label="색상 선택">
+  <div class="cp-head">
+    <span class="cp-title">색상 선택</span>
+    <button type="button" class="cp-close" id="cpClose" aria-label="닫기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"></line><line x1="19" y1="5" x2="5" y2="19"></line></svg>
+    </button>
+  </div>
+  <div class="cp-sv" id="cpSV">
+    <div class="cp-sv-cursor" id="cpSVCursor"></div>
+  </div>
+  <div class="cp-hue" id="cpHue">
+    <div class="cp-hue-cursor" id="cpHueCursor"></div>
+  </div>
+  <div class="cp-hex-row">
+    <span class="cp-preview" id="cpPreview"></span>
+    <span class="cp-hex-prefix">#</span>
+    <input type="text" id="cpHexInput" maxlength="6" autocomplete="off" spellcheck="false" inputmode="text">
+  </div>
+  <button type="button" class="btn primary cp-done" id="cpDone">완료</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -759,6 +925,159 @@
   ];
   rangeDefs.forEach(d=> bindRange(d[0], d[1], d[2], d[3], d[4]));
 
+  /* ---------------- custom color picker ----------------
+     Replaces the OS/browser-native <input type="color"> (which behaves
+     inconsistently across phones/desktops) with an in-page picker. Each
+     "custom" swatch is now a hidden <input> (keeps its id/.value so all
+     the existing color logic below is untouched) plus a round .cp-trigger
+     button that opens this shared modal. Committing a color just sets
+     the hidden input's value and dispatches a normal 'input' event, so
+     every existing listener fires exactly as it did with the native input. */
+  (function(){
+    const backdrop = $('#cpBackdrop');
+    const modal = $('#cpModal');
+    const svEl = $('#cpSV');
+    const svCursor = $('#cpSVCursor');
+    const hueEl = $('#cpHue');
+    const hueCursor = $('#cpHueCursor');
+    const hexInput = $('#cpHexInput');
+    const preview = $('#cpPreview');
+    const doneBtn = $('#cpDone');
+    const closeBtn = $('#cpClose');
+    if(!backdrop || !modal) return;
+
+    let targetInput = null, targetTrigger = null;
+    let h = 0, s = 1, v = 1;
+    let lastCommitted = null;
+
+    function hsvToHex(h,s,v){
+      const c = v*s, x = c*(1-Math.abs((h/60)%2-1)), m = v-c;
+      let r,g,b;
+      if(h<60){r=c;g=x;b=0;} else if(h<120){r=x;g=c;b=0;}
+      else if(h<180){r=0;g=c;b=x;} else if(h<240){r=0;g=x;b=c;}
+      else if(h<300){r=x;g=0;b=c;} else {r=c;g=0;b=x;}
+      const toHex = n=> Math.round((n+m)*255).toString(16).padStart(2,'0');
+      return '#' + toHex(r) + toHex(g) + toHex(b);
+    }
+    function hexToHsv(hex){
+      hex = (hex||'#000000').replace('#','');
+      if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+      if(hex.length!==6) hex = '000000';
+      const r = parseInt(hex.substr(0,2),16)/255;
+      const g = parseInt(hex.substr(2,2),16)/255;
+      const b = parseInt(hex.substr(4,2),16)/255;
+      const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max-min;
+      let hh = 0;
+      if(d !== 0){
+        if(max===r) hh = 60*(((g-b)/d)%6);
+        else if(max===g) hh = 60*((b-r)/d+2);
+        else hh = 60*((r-g)/d+4);
+      }
+      if(hh<0) hh += 360;
+      return { h:hh, s: max===0?0:d/max, v:max };
+    }
+
+    window.syncColorTrigger = function(id, hex){
+      const trig = document.querySelector('.cp-trigger[data-for="'+id+'"]');
+      if(trig && hex) trig.style.setProperty('--cp-color', hex);
+    };
+
+    function paint(){
+      svEl.style.backgroundColor = hsvToHex(h,1,1);
+      svCursor.style.left = (s*100) + '%';
+      svCursor.style.top = ((1-v)*100) + '%';
+      hueCursor.style.left = (h/360*100) + '%';
+      const hex = hsvToHex(h,s,v);
+      preview.style.background = hex;
+      hexInput.value = hex.slice(1).toUpperCase();
+      if(targetTrigger) targetTrigger.style.setProperty('--cp-color', hex);
+    }
+
+    function commit(){
+      if(!targetInput) return;
+      const hex = hsvToHex(h,s,v);
+      if(hex === lastCommitted) return;
+      lastCommitted = hex;
+      targetInput.value = hex;
+      targetInput.dispatchEvent(new Event('input', { bubbles:true }));
+    }
+
+    function open(inputEl, triggerEl){
+      targetInput = inputEl;
+      targetTrigger = triggerEl;
+      const hsv = hexToHsv(inputEl.value);
+      h = hsv.h; s = hsv.s; v = hsv.v;
+      lastCommitted = hsvToHex(h,s,v);
+      paint();
+      backdrop.classList.add('open');
+      modal.classList.add('open');
+    }
+    function close(){
+      backdrop.classList.remove('open');
+      modal.classList.remove('open');
+      targetInput = null;
+      targetTrigger = null;
+    }
+
+    $$('.cp-trigger').forEach(trigger=>{
+      const input = document.getElementById(trigger.dataset.for);
+      if(!input) return;
+      trigger.style.setProperty('--cp-color', input.value || '#ffffff');
+      trigger.addEventListener('click', ()=> open(input, trigger));
+    });
+
+    backdrop.addEventListener('click', close);
+    closeBtn.addEventListener('click', close);
+    doneBtn.addEventListener('click', ()=>{ commit(); close(); });
+
+    function ratioFromEvent(el, evt){
+      const r = el.getBoundingClientRect();
+      let x = (evt.clientX - r.left) / r.width;
+      let y = (evt.clientY - r.top) / r.height;
+      return { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) };
+    }
+
+    let draggingSV = false, draggingHue = false;
+    svEl.addEventListener('pointerdown', (e)=>{
+      draggingSV = true;
+      try{ svEl.setPointerCapture(e.pointerId); }catch(err){}
+      const { x, y } = ratioFromEvent(svEl, e);
+      s = x; v = 1-y; paint();
+    });
+    svEl.addEventListener('pointermove', (e)=>{
+      if(!draggingSV) return;
+      const { x, y } = ratioFromEvent(svEl, e);
+      s = x; v = 1-y; paint();
+    });
+    svEl.addEventListener('pointerup', ()=>{ if(draggingSV){ draggingSV = false; commit(); } });
+    svEl.addEventListener('pointercancel', ()=>{ draggingSV = false; });
+
+    hueEl.addEventListener('pointerdown', (e)=>{
+      draggingHue = true;
+      try{ hueEl.setPointerCapture(e.pointerId); }catch(err){}
+      const { x } = ratioFromEvent(hueEl, e);
+      h = x*360; paint();
+    });
+    hueEl.addEventListener('pointermove', (e)=>{
+      if(!draggingHue) return;
+      const { x } = ratioFromEvent(hueEl, e);
+      h = x*360; paint();
+    });
+    hueEl.addEventListener('pointerup', ()=>{ if(draggingHue){ draggingHue = false; commit(); } });
+    hueEl.addEventListener('pointercancel', ()=>{ draggingHue = false; });
+
+    hexInput.addEventListener('input', ()=>{
+      const val = hexInput.value.replace(/[^0-9a-fA-F]/g,'').slice(0,6);
+      hexInput.value = val;
+      if(val.length === 6){
+        const hsv = hexToHsv('#'+val);
+        h = hsv.h; s = hsv.s; v = hsv.v;
+        paint();
+        commit();
+      }
+    });
+  })();
+
   /* ---------------- text color swatches ---------------- */
   $$('#textColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
@@ -766,6 +1085,7 @@
       sw.classList.add('active');
       state.textColor = sw.dataset.color;
       $('#textColorCustom').value = state.textColor;
+      syncColorTrigger('textColorCustom', state.textColor);
       applyTextStyles();
     });
   });
@@ -782,6 +1102,7 @@
       sw.classList.add('active');
       state.bgA = sw.dataset.bg;
       $('#bgACustom').value = state.bgA;
+      syncColorTrigger('bgACustom', state.bgA);
       applyBackground();
     });
   });
@@ -796,6 +1117,7 @@
       sw.classList.add('active');
       state.bgB = sw.dataset.bg2;
       $('#bgBCustom').value = state.bgB;
+      syncColorTrigger('bgBCustom', state.bgB);
       applyBackground();
     });
   });
@@ -839,7 +1161,11 @@
   }
 
   $$('[data-hl]').forEach(sw=>{
-    sw.addEventListener('click', ()=> applyHighlight(sw.dataset.hl));
+    sw.addEventListener('click', ()=>{
+      applyHighlight(sw.dataset.hl);
+      $('#hlCustom').value = sw.dataset.hl;
+      syncColorTrigger('hlCustom', sw.dataset.hl);
+    });
   });
   $('#hlCustom').addEventListener('input', e=> applyHighlight(e.target.value));
 
@@ -892,7 +1218,11 @@
   }
 
   $$('[data-tc]').forEach(sw=>{
-    sw.addEventListener('click', ()=> applyTextColor(sw.dataset.tc));
+    sw.addEventListener('click', ()=>{
+      applyTextColor(sw.dataset.tc);
+      $('#tcCustom').value = sw.dataset.tc;
+      syncColorTrigger('tcCustom', sw.dataset.tc);
+    });
   });
   $('#tcCustom').addEventListener('input', e=> applyTextColor(e.target.value));
 
@@ -949,11 +1279,13 @@
     updateCanvasSize();
   }
 
+  $('#btnToggleBold').addEventListener('click', ()=> toggleInlineFormat('b'));
   $('#btnToggleItalic').addEventListener('click', ()=> toggleInlineFormat('it'));
   $('#btnToggleStrike').addEventListener('click', ()=> toggleInlineFormat('st'));
   $('#btnToggleUnderline').addEventListener('click', ()=>{
     toggleInlineFormat('ul', span=>{ span.style.textDecorationColor = lastUnderlineColor; });
   });
+  $('#btnToggleQuote').addEventListener('click', ()=> toggleInlineFormat('qt'));
 
   function applyUnderlineColorToAll(color){
     lastUnderlineColor = color;
@@ -965,6 +1297,7 @@
       $$('#underlineColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       $('#ucCustom').value = sw.dataset.uc;
+      syncColorTrigger('ucCustom', sw.dataset.uc);
       applyUnderlineColorToAll(sw.dataset.uc);
     });
   });
@@ -1045,6 +1378,7 @@
       $$('#bubbleColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       $('#bubbleColorCustom').value = sw.dataset.bubble;
+      syncColorTrigger('bubbleColorCustom', sw.dataset.bubble);
       lastBubbleColor = sw.dataset.bubble;
       if(selectedBubble){
         selectedBubble.style.background = sw.dataset.bubble;
@@ -1269,6 +1603,91 @@
     applyZoomTransform();
   });
 
+  /* ---------------- mobile bottom sheet (drag to resize / tap to toggle) ----------------
+     Below 900px the settings panel is a draggable sheet (--sheet-h CSS var, read by
+     the media-query rules above). Desktop keeps the original split-view layout and
+     never reads this variable, so none of this affects it. */
+  (function(){
+    const panel = $('#panel');
+    const handle = $('#sheetHandle');
+    if(!panel || !handle) return;
+
+    const PEEK = 0.46, EXPANDED = 0.88, MIN = 0.24, MAX = 0.92;
+    const vh = (v)=> window.innerHeight * v;
+
+    let expanded = false;
+    let currentH = vh(PEEK);
+    let dragging = false, moved = false, startY = 0, startH = 0, suppressClick = false;
+
+    function setHeight(px, animate){
+      if(!animate) panel.classList.add('dragging');
+      document.documentElement.style.setProperty('--sheet-h', px + 'px');
+      if(!animate){
+        requestAnimationFrame(()=> requestAnimationFrame(()=> panel.classList.remove('dragging')));
+      }
+    }
+    function toggle(){
+      expanded = !expanded;
+      currentH = expanded ? vh(EXPANDED) : vh(PEEK);
+      setHeight(currentH, true);
+    }
+
+    setHeight(currentH, true);
+
+    handle.addEventListener('touchstart', (e)=>{
+      if(e.touches.length !== 1) return;
+      dragging = true; moved = false;
+      panel.classList.add('dragging');
+      startY = e.touches[0].clientY;
+      startH = currentH;
+    }, { passive:true });
+
+    handle.addEventListener('touchmove', (e)=>{
+      if(!dragging) return;
+      const dy = startY - e.touches[0].clientY;
+      if(Math.abs(dy) > 6) moved = true;
+      const h = Math.min(vh(MAX), Math.max(vh(MIN), startH + dy));
+      document.documentElement.style.setProperty('--sheet-h', h + 'px');
+    }, { passive:true });
+
+    handle.addEventListener('touchend', ()=>{
+      if(!dragging) return;
+      dragging = false;
+      panel.classList.remove('dragging');
+      if(moved){
+        const curPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-h')) || currentH;
+        expanded = Math.abs(curPx - vh(EXPANDED)) < Math.abs(curPx - vh(PEEK));
+        currentH = expanded ? vh(EXPANDED) : vh(PEEK);
+        setHeight(currentH, true);
+      } else {
+        toggle();
+      }
+      suppressClick = true;
+      setTimeout(()=>{ suppressClick = false; }, 400);
+    });
+
+    handle.addEventListener('click', ()=>{
+      if(suppressClick) return;
+      toggle();
+    });
+    handle.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+    });
+
+    window.addEventListener('resize', ()=>{
+      currentH = expanded ? vh(EXPANDED) : vh(PEEK);
+      setHeight(currentH, true);
+    });
+
+    // Switching tabs on a still-peeking sheet should reveal the content, not
+    // leave the person scrolling a tiny sliver.
+    $$('.tab').forEach(t=>{
+      t.addEventListener('click', ()=>{
+        if(!expanded && window.innerWidth < 900){ toggle(); }
+      });
+    });
+  })();
+
   /* ---------------- placeholder handling ---------------- */
   function refreshPlaceholder(){
     const empty = textBlock.textContent.trim().length === 0;
@@ -1474,7 +1893,10 @@
       const dv = (sw.dataset[dataKey] || '').toLowerCase();
       sw.classList.toggle('active', dv === target);
     });
-    if(customSel){ const c = $(customSel); if(c) c.value = value; }
+    if(customSel){
+      const c = $(customSel);
+      if(c){ c.value = value; syncColorTrigger(customSel.replace('#',''), value); }
+    }
   }
   function syncUIFromState(){
     $('#fontSelect').value = state.font;
