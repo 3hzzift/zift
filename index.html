@@ -219,17 +219,26 @@
   .text-block span.it{ font-style:italic; }
   .text-block span.st{ text-decoration:line-through; }
   .text-block span.ul{ text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; }
-  .text-block span.qt{ font-style:italic; color:var(--muted); }
+  .text-block span.qt{ font-style:var(--quote-style, italic); color:var(--quote-color, var(--muted)); }
   .text-block span.qt::before{ content:'“'; font-style:normal; }
   .text-block span.qt::after{ content:'”'; font-style:normal; }
+  .text-block.hide-quote-marks span.qt::before,
+  .text-block.hide-quote-marks span.qt::after{ content:''; }
+  .text-block span.ttl{ font-size:var(--title-size, 40px); font-weight:700; }
+  .text-block span.sub{ font-size:var(--subtitle-size, 32px); font-weight:600; }
 
   .bubble-row{
+    position:relative;
     display:flex; width:100%;
     margin:calc(var(--para-gap,16px) * 0.6) 0;
+    transition:padding-top .12s ease;
   }
   .bubble-row.dir-left{ justify-content:flex-start; }
   .bubble-row.dir-right{ justify-content:flex-end; }
+  .bubble-row.row-selected{ padding-top:26px; }
+  .bubble-row.dragging{ opacity:0.55; }
   .bubble{
+    position:relative;
     display:inline-block; max-width:84%;
     padding:0.65em 0.9em; border-radius:1.1em;
     font-size:0.92em; line-height:1.45;
@@ -239,6 +248,19 @@
   .bubble-row.dir-left .bubble{ border-bottom-left-radius:0.3em; }
   .bubble-row.dir-right .bubble{ border-bottom-right-radius:0.3em; }
   .bubble.selected{ box-shadow:0 0 0 2px var(--accent); }
+
+  /* Drag handle: only visible while its bubble is selected. Lets the
+     whole bubble row be grabbed and dropped between paragraphs. */
+  .bubble-move-handle{
+    position:absolute; top:0; left:50%; transform:translate(-50%,0);
+    display:none; align-items:center; justify-content:center;
+    width:36px; height:20px; padding:0; border:none; border-radius:7px;
+    background:var(--accent); color:#fff;
+    cursor:grab; touch-action:none; z-index:6;
+  }
+  .bubble-row.row-selected .bubble-move-handle{ display:flex; }
+  .bubble-move-handle:active{ cursor:grabbing; }
+  .bubble-move-handle svg{ width:16px; height:16px; pointer-events:none; }
 
   .credit-line{
     position:relative; z-index:2;
@@ -355,6 +377,7 @@
   .format-btn .fmt-s{ text-decoration:line-through; font-weight:700; }
   .format-btn .fmt-u{ text-decoration:underline; text-underline-offset:2px; font-weight:700; }
   .format-btn .fmt-q{ font-weight:800; font-family:Georgia, 'Times New Roman', serif; }
+  .format-btn.label{ font-size:12.5px; font-weight:700; padding:10px 4px; }
 
   .accordion-head{
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -537,6 +560,16 @@
             <p class="field-hint">문장을 드래그로 선택한 뒤 눌러 적용하고, 다시 누르면 해제돼요.</p>
           </div>
 
+          <div class="field">
+            <div class="field-row"><span class="field-label">글자 크기 유형</span></div>
+            <div class="format-btn-row">
+              <button class="format-btn label" id="btnSizeTitle">제목</button>
+              <button class="format-btn label" id="btnSizeSubtitle">부제목</button>
+              <button class="format-btn label" id="btnSizeBody">본문</button>
+            </div>
+            <p class="field-hint">문장을 드래그로 선택한 뒤 눌러 제목·부제목 크기를 적용해요. 본문을 누르면 원래 크기로 되돌아가요.</p>
+          </div>
+
           <div class="divider"></div>
 
           <p class="section-title">정렬 &amp; 줄바꿈</p>
@@ -554,8 +587,18 @@
 
           <p class="section-title">간격 디테일</p>
           <div class="field">
-            <div class="field-row"><span class="field-label">크기</span><span class="field-value" id="sizeVal">26px</span></div>
+            <div class="field-row"><span class="field-label">본문 크기</span><span class="field-value" id="sizeVal">26px</span></div>
             <input type="range" id="sizeRange" min="8" max="72" step="1" value="26">
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">제목 크기</span><span class="field-value" id="titleSizeVal">40px</span></div>
+            <input type="range" id="titleSizeRange" min="20" max="96" step="1" value="40">
+            <p class="field-hint">문장을 드래그로 선택한 뒤 '제목' 버튼을 누르면 이 크기가 적용돼요.</p>
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">부제목 크기</span><span class="field-value" id="subtitleSizeVal">32px</span></div>
+            <input type="range" id="subtitleSizeRange" min="16" max="80" step="1" value="32">
+            <p class="field-hint">문장을 드래그로 선택한 뒤 '부제목' 버튼을 누르면 이 크기가 적용돼요.</p>
           </div>
           <div class="field">
             <div class="field-row"><span class="field-label">자간</span><span class="field-value" id="trackVal">0px</span></div>
@@ -647,6 +690,49 @@
 
           <div class="divider"></div>
 
+          <div class="accordion collapsed" id="quoteAccordion">
+            <button type="button" class="accordion-head" id="quoteAccordionHead" aria-expanded="false">
+              <span class="section-title" style="margin:0;">따옴표 서식</span>
+              <span class="accordion-caret">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </span>
+            </button>
+            <div class="accordion-body" id="quoteAccordionBody">
+
+              <p class="section-title">기울임</p>
+              <div class="field">
+                <div class="seg" id="quoteItalicSeg">
+                  <button data-value="on" class="active">사용</button>
+                  <button data-value="off">해제</button>
+                </div>
+              </div>
+
+              <p class="section-title">따옴표 색</p>
+              <div class="field">
+                <div class="swatches" id="quoteColorSwatches">
+                  <span class="swatch active" data-qc="#8C8C8C" style="background:#8C8C8C"></span>
+                  <span class="swatch" data-qc="#B3554B" style="background:#B3554B"></span>
+                  <span class="swatch" data-qc="#33415C" style="background:#33415C"></span>
+                  <span class="swatch" data-qc="#111111" style="background:#111111"></span>
+                  <span class="swatch" data-qc="#FFFFFF" style="background:#FFFFFF"></span>
+                  <input type="hidden" id="qcCustom" value="#8c8c8c"><button type="button" class="cp-trigger" data-for="qcCustom" aria-label="따옴표 색 직접 선택"></button>
+                </div>
+              </div>
+
+              <p class="section-title">따옴표 기호</p>
+              <div class="field">
+                <div class="seg" id="quoteMarksSeg">
+                  <button data-value="on" class="active">표시</button>
+                  <button data-value="off">숨김</button>
+                </div>
+                <p class="field-hint">문장을 드래그로 선택한 뒤 " 버튼을 누르면 여기서 정한 기울임·색·기호 설정대로 적용돼요.</p>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
           <p class="section-title">말풍선</p>
           <div class="field">
             <div class="field-row"><span class="field-label">대사를 드래그로 선택한 뒤 버튼을 눌러주세요</span></div>
@@ -656,10 +742,17 @@
           </div>
           <div class="field" id="bubbleEditWrap" style="display:none;">
             <div class="field-row"><span class="field-label">선택된 말풍선</span></div>
-            <div class="seg" id="bubbleDirSeg">
-              <button data-value="left" class="active">왼쪽</button>
-              <button data-value="right">오른쪽</button>
+            <div class="field-row" style="margin-top:10px; gap:8px;">
+              <div class="seg" id="bubbleDirSeg" style="flex:1;">
+                <button data-value="left" class="active">왼쪽</button>
+                <button data-value="right">오른쪽</button>
+              </div>
+              <div class="seg" id="bubbleMoveSeg" style="flex:0 0 auto;">
+                <button type="button" id="btnBubbleMoveUp" aria-label="말풍선 위로 이동" style="padding:8px 12px;">▲</button>
+                <button type="button" id="btnBubbleMoveDown" aria-label="말풍선 아래로 이동" style="padding:8px 12px;">▼</button>
+              </div>
             </div>
+            <p class="field-hint" style="margin-top:2px;">말풍선 위 손잡이(⠿)를 끌어도 문단 사이로 옮길 수 있어요.</p>
             <div class="swatches" style="margin-top:14px;" id="bubbleColorSwatches">
               <span class="swatch active" data-bubble="#2F6FED" style="background:#2F6FED"></span>
               <span class="swatch" data-bubble="#AEDBFB" style="background:#AEDBFB"></span>
@@ -667,6 +760,25 @@
               <span class="swatch" data-bubble="#FFFFFF" style="background:#FFFFFF"></span>
               <input type="hidden" id="bubbleColorCustom" value="#2f6fed"><button type="button" class="cp-trigger" data-for="bubbleColorCustom" aria-label="말풍선 색 직접 선택"></button>
             </div>
+
+            <div class="field-row" style="margin-top:16px;"><span class="field-label">말풍선 글자색</span></div>
+            <div class="swatches" style="margin-top:10px;" id="bubbleTextColorSwatches">
+              <span class="swatch active" data-bubbletext="#FFFFFF" style="background:#FFFFFF"></span>
+              <span class="swatch" data-bubbletext="#111111" style="background:#111111"></span>
+              <span class="swatch" data-bubbletext="#2F6FED" style="background:#2F6FED"></span>
+              <span class="swatch" data-bubbletext="#B3554B" style="background:#B3554B"></span>
+              <input type="hidden" id="bubbleTextColorCustom" value="#ffffff"><button type="button" class="cp-trigger" data-for="bubbleTextColorCustom" aria-label="말풍선 글자색 직접 선택"></button>
+            </div>
+
+            <div class="field" style="margin-top:16px;">
+              <div class="field-row"><span class="field-label">말풍선 글자 크기</span><span class="field-value" id="bubbleSizeVal">92%</span></div>
+              <input type="range" id="bubbleSizeRange" min="60" max="160" step="1" value="92">
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">모서리 둥글기</span><span class="field-value" id="bubbleRadiusVal">18px</span></div>
+              <input type="range" id="bubbleRadiusRange" min="4" max="36" step="1" value="18">
+            </div>
+
             <div class="field-row" style="margin-top:14px;">
               <button class="btn ghost" id="btnBubbleDelete" style="width:100%; padding:9px 12px; font-size:12.5px; color:var(--danger);">이 말풍선 삭제</button>
             </div>
@@ -852,7 +964,12 @@
     bgDarkness: 0,
     creditCharacter: '',
     creditAuthor: '',
-    creditSize: 13
+    creditSize: 13,
+    titleSize: 40,
+    subtitleSize: 32,
+    quoteItalic: true,
+    quoteColor: '#8C8C8C',
+    quoteMarks: true
   };
 
   function showToast(msg){
@@ -912,6 +1029,8 @@
   }
   const rangeDefs = [
     ['sizeRange','sizeVal','px','size', applyTextStyles],
+    ['titleSizeRange','titleSizeVal','px','titleSize', applyTextStyles],
+    ['subtitleSizeRange','subtitleSizeVal','px','subtitleSize', applyTextStyles],
     ['trackRange','trackVal','px','tracking', applyTextStyles],
     ['leadRange','leadVal','px','leading', applyTextStyles],
     ['paraRange','paraVal','px','paraGap', applyTextStyles],
@@ -1306,11 +1425,217 @@
     applyUnderlineColorToAll(e.target.value);
   });
 
+  /* ---------------- quote (따옴표) formatting ----------------
+     These control how span.qt (the " 인용구 toggle) looks. They're stored
+     in `state` (so they save/load with presets) and pushed as CSS
+     variables, which means every existing and future qt span updates
+     together — same pattern as the underline color "apply to all". */
+  bindSeg('quoteItalicSeg', v=>{ state.quoteItalic = (v === 'on'); applyTextStyles(); });
+  bindSeg('quoteMarksSeg', v=>{ state.quoteMarks = (v === 'on'); applyTextStyles(); });
+
+  $$('#quoteColorSwatches .swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      $$('#quoteColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      state.quoteColor = sw.dataset.qc;
+      $('#qcCustom').value = state.quoteColor;
+      syncColorTrigger('qcCustom', state.quoteColor);
+      applyTextStyles();
+    });
+  });
+  $('#qcCustom').addEventListener('input', e=>{
+    $$('#quoteColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+    state.quoteColor = e.target.value;
+    applyTextStyles();
+  });
+
+  /* ---------------- title / subtitle / body text size ----------------
+     Select text, then pick 제목/부제목/본문 to wrap (or unwrap) it with a
+     size role. Only one role applies at a time, so picking a new role
+     first strips any existing one from the selection; picking the same
+     role again (or 본문) clears it back to the plain inherited size. */
+  function setTextSize(role){
+    const range = getSelRange();
+    if(!range || range.collapsed){
+      showToast('먼저 문장을 드래그해서 선택해주세요');
+      return;
+    }
+    const hasFormat = role && $$('span.' + role, textBlock).some(span => range.intersectsNode(span));
+
+    ['ttl','sub'].forEach(cls=>{
+      $$('span.' + cls, textBlock).forEach(span=>{
+        if(range.intersectsNode(span)){
+          const parent = span.parentNode;
+          while(span.firstChild) parent.insertBefore(span.firstChild, span);
+          parent.removeChild(span);
+        }
+      });
+    });
+
+    if(role && !hasFormat){
+      const span = document.createElement('span');
+      span.className = role;
+      try{
+        const frag = range.extractContents();
+        span.appendChild(frag);
+        range.insertNode(span);
+      }catch(e){ /* ignore */ }
+    }
+
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
+  }
+  $('#btnSizeTitle').addEventListener('click', ()=> setTextSize('ttl'));
+  $('#btnSizeSubtitle').addEventListener('click', ()=> setTextSize('sub'));
+  $('#btnSizeBody').addEventListener('click', ()=> setTextSize(null));
+
   /* ---------------- chat bubble ---------------- */
   let selectedBubble = null;
   let lastBubbleColor = '#2F6FED';
+  let lastBubbleTextColor = '#FFFFFF';
+  let lastBubbleSize = 92;
+  let lastBubbleRadius = 18;
+
+  // Keeps the "flap" corner (the little flat point that makes a bubble
+  // look like it's pointing at its row's edge) proportional whenever the
+  // roundness slider or the left/right direction changes — border-radius
+  // set inline overrides the CSS rule that used to do this, so it has to
+  // be re-applied here in JS instead.
+  function applyBubbleCorner(bubble){
+    if(!bubble) return;
+    const radius = parseInt(bubble.dataset.radius, 10) || lastBubbleRadius;
+    bubble.style.borderRadius = radius + 'px';
+    const flap = Math.max(2, Math.round(radius * 0.28));
+    bubble.style.borderBottomLeftRadius = '';
+    bubble.style.borderBottomRightRadius = '';
+    const row = bubble.closest('.bubble-row');
+    if(row && row.classList.contains('dir-right')) bubble.style.borderBottomRightRadius = flap + 'px';
+    else bubble.style.borderBottomLeftRadius = flap + 'px';
+  }
+
+  // The browser usually leaves the very first line of typed text as a bare
+  // text node directly under #textBlock — only lines created afterwards by
+  // pressing Enter get wrapped in their own <div>. Bare text nodes don't
+  // count as .previousElementSibling / .children, which is why a bubble
+  // made from the 2nd line could never be moved above the 1st paragraph:
+  // there was nothing there for the move/drag logic to see. This wraps any
+  // such loose top-level content (grouping consecutive loose nodes — e.g.
+  // text mixed with bold/italic spans — into one paragraph <div>) so every
+  // paragraph is a normal, reorderable element.
+  function normalizeTopLevelParagraphs(){
+    let node = textBlock.firstChild;
+    while(node){
+      const isBlock = node.nodeType === 1 && (node.tagName === 'DIV' || node.classList.contains('bubble-row'));
+      if(isBlock){ node = node.nextSibling; continue; }
+      const wrap = document.createElement('div');
+      textBlock.insertBefore(wrap, node);
+      let n = node;
+      while(n && !(n.nodeType === 1 && (n.tagName === 'DIV' || n.classList.contains('bubble-row')))){
+        const after = n.nextSibling;
+        wrap.appendChild(n);
+        n = after;
+      }
+      node = wrap.nextSibling;
+    }
+  }
+
+  // A bubble is created via range.insertNode(), which drops it wherever the
+  // selection happened to live — usually *inside* a paragraph <div> (or even
+  // inside a nested b/it/qt span), not as a sibling of the top-level
+  // paragraphs. Left like that, the bubble is trapped inside its original
+  // paragraph and can never be dragged out to sit between other paragraphs.
+  // This walks the node up to be a direct child of #textBlock, splitting
+  // each ancestor around it as needed (the same thing a rich text editor
+  // does when you press Enter in the middle of a styled sentence), so the
+  // row ends up as a normal top-level block that can be freely reordered.
+  function promoteToTopLevel(node){
+    let current = node;
+    while(current.parentNode && current.parentNode !== textBlock){
+      const parent = current.parentNode;
+      const grandParent = parent.parentNode;
+      if(!grandParent) break;
+
+      const after = document.createElement(parent.tagName);
+      Array.from(parent.attributes || []).forEach(attr=> after.setAttribute(attr.name, attr.value));
+      while(current.nextSibling) after.appendChild(current.nextSibling);
+
+      grandParent.insertBefore(current, parent.nextSibling);
+      if(after.hasChildNodes()) grandParent.insertBefore(after, current.nextSibling);
+      if(!parent.hasChildNodes()) parent.remove();
+    }
+  }
+
+  // Small grab handle shown above a bubble row while it's selected, so it
+  // can be dragged up/down and dropped between any two paragraphs.
+  function makeBubbleHandle(row){
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'bubble-move-handle';
+    handle.setAttribute('aria-label', '말풍선 위치 이동 손잡이');
+    handle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
+    row.appendChild(handle);
+    bindBubbleDrag(handle, row);
+    return handle;
+  }
+
+  // Drag-to-reorder: while dragging, the row is live-moved to sit right
+  // before whichever top-level sibling the pointer is currently above, so
+  // it can be dropped anywhere among the body's paragraphs.
+  function bindBubbleDrag(handle, row){
+    let dragging = false;
+    let pointerId = null;
+
+    function onPointerMove(e){
+      if(!dragging) return;
+      e.preventDefault();
+      const y = e.clientY;
+      const siblings = Array.from(textBlock.children).filter(el=> el !== row);
+      let target = null;
+      for(const sib of siblings){
+        const rect = sib.getBoundingClientRect();
+        if(y < rect.top + rect.height / 2){ target = sib; break; }
+      }
+      if(target){
+        if(row.nextSibling !== target) textBlock.insertBefore(row, target);
+      } else if(textBlock.lastChild !== row){
+        textBlock.appendChild(row);
+      }
+      updateCanvasSize();
+    }
+
+    function onPointerUp(e){
+      if(!dragging) return;
+      dragging = false;
+      row.classList.remove('dragging');
+      if(pointerId !== null && handle.releasePointerCapture){
+        try{ handle.releasePointerCapture(pointerId); }catch(err){}
+      }
+      pointerId = null;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      refreshPlaceholder();
+      updateCanvasSize();
+    }
+
+    handle.addEventListener('pointerdown', (e)=>{
+      e.preventDefault();
+      normalizeTopLevelParagraphs();
+      dragging = true;
+      pointerId = e.pointerId;
+      row.classList.add('dragging');
+      if(handle.setPointerCapture){
+        try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+      }
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
+    });
+  }
 
   function convertSelectionToBubble(){
+    normalizeTopLevelParagraphs();
     const range = getSelRange();
     if(!range || range.collapsed){
       showToast('말풍선으로 만들 문장을 먼저 선택해주세요');
@@ -1324,7 +1649,13 @@
     bubble.className = 'bubble';
     bubble.contentEditable = 'true';
     bubble.style.background = lastBubbleColor;
+    bubble.style.setProperty('--bubble-bg', lastBubbleColor);
     bubble.dataset.color = lastBubbleColor;
+    bubble.style.color = lastBubbleTextColor;
+    bubble.dataset.textColor = lastBubbleTextColor;
+    bubble.style.fontSize = lastBubbleSize + '%';
+    bubble.dataset.size = lastBubbleSize;
+    bubble.dataset.radius = lastBubbleRadius;
 
     try{
       const frag = range.extractContents();
@@ -1333,6 +1664,9 @@
       range.insertNode(row);
     }catch(e){ return; }
 
+    promoteToTopLevel(row);
+    makeBubbleHandle(row);
+    applyBubbleCorner(bubble);
     window.getSelection().removeAllRanges();
     savedRange = null;
     refreshPlaceholder();
@@ -1342,26 +1676,127 @@
   $('#btnMakeBubble').addEventListener('click', convertSelectionToBubble);
 
   function selectBubble(bubble){
-    if(selectedBubble && selectedBubble !== bubble) selectedBubble.classList.remove('selected');
+    if(selectedBubble && selectedBubble !== bubble){
+      selectedBubble.classList.remove('selected');
+      const prevRow = selectedBubble.closest('.bubble-row');
+      if(prevRow) prevRow.classList.remove('row-selected');
+    }
     selectedBubble = bubble;
     bubble.classList.add('selected');
     $('#bubbleEditWrap').style.display = 'block';
     const row = bubble.closest('.bubble-row');
+    row.classList.add('row-selected');
     setSegActive('bubbleDirSeg', row.classList.contains('dir-right') ? 'right' : 'left');
     syncSwatch('#bubbleColorSwatches .swatch', 'bubble', bubble.dataset.color || lastBubbleColor, '#bubbleColorCustom');
+    syncSwatch('#bubbleTextColorSwatches .swatch', 'bubbletext', bubble.dataset.textColor || lastBubbleTextColor, '#bubbleTextColorCustom');
+
+    const size = bubble.dataset.size || lastBubbleSize;
+    $('#bubbleSizeRange').value = size;
+    $('#bubbleSizeVal').textContent = size + '%';
+
+    const radius = bubble.dataset.radius || lastBubbleRadius;
+    $('#bubbleRadiusRange').value = radius;
+    $('#bubbleRadiusVal').textContent = radius + 'px';
   }
   function deselectBubble(){
-    if(selectedBubble) selectedBubble.classList.remove('selected');
+    if(selectedBubble){
+      selectedBubble.classList.remove('selected');
+      const row = selectedBubble.closest('.bubble-row');
+      if(row) row.classList.remove('row-selected');
+    }
     selectedBubble = null;
     $('#bubbleEditWrap').style.display = 'none';
+  }
+
+  // Move the selected bubble's row up/down among the top-level paragraphs
+  // and other bubble rows, so it can be freely repositioned without
+  // dragging (handy on precise pointer input, or as a companion to the
+  // drag handle).
+  function moveSelectedBubble(dir){
+    if(!selectedBubble) return;
+    normalizeTopLevelParagraphs();
+    const row = selectedBubble.closest('.bubble-row');
+    if(dir === 'up'){
+      const prev = row.previousElementSibling;
+      if(prev) textBlock.insertBefore(row, prev);
+    } else {
+      const next = row.nextElementSibling;
+      if(next) textBlock.insertBefore(next, row);
+    }
+    updateCanvasSize();
+  }
+  $('#btnBubbleMoveUp').addEventListener('click', ()=> moveSelectedBubble('up'));
+  $('#btnBubbleMoveDown').addEventListener('click', ()=> moveSelectedBubble('down'));
+
+  // Clicking on empty space directly inside #textBlock (not on any
+  // paragraph or bubble) should still let you keep typing at the end of
+  // the document — this matters especially when the last block is a
+  // bubble row, since it's contentEditable="false" and browsers won't
+  // place a caret past it on their own.
+  function focusEndOfText(){
+    let last = textBlock.lastElementChild;
+    if(!last || last.classList.contains('bubble-row')){
+      const p = document.createElement('div');
+      p.appendChild(document.createElement('br'));
+      textBlock.appendChild(p);
+      last = p;
+    }
+    textBlock.focus();
+    const range = document.createRange();
+    range.selectNodeContents(last);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    refreshPlaceholder();
+    updateCanvasSize();
   }
 
   textBlock.addEventListener('click', (e)=>{
     const b = e.target.closest('.bubble');
     if(b && textBlock.contains(b)){
       selectBubble(b);
+      return;
+    }
+    deselectBubble();
+    // e.target === textBlock only happens when the click missed every real
+    // paragraph/bubble box — e.g. the vertical gap between two paragraphs,
+    // or the empty area below the last one. In every other case the click
+    // already landed inside a paragraph and the browser placed the caret
+    // there correctly on its own, so we leave it alone.
+    if(e.target !== textBlock) return;
+
+    // Use the browser's own point→caret lookup so a click in a gap between
+    // paragraphs lands the cursor at the nearest actual text position
+    // (letting you edit earlier sentences) instead of always jumping to
+    // the end of the document.
+    let range = null;
+    if(document.caretRangeFromPoint){
+      range = document.caretRangeFromPoint(e.clientX, e.clientY);
+    } else if(document.caretPositionFromPoint){
+      const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if(pos){
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+        range.collapse(true);
+      }
+    }
+
+    const landedNode = range && range.startContainer;
+    const landedEl = landedNode && (landedNode.nodeType === 1 ? landedNode : landedNode.parentElement);
+    const hitBubbleRow = landedEl && landedEl.closest && landedEl.closest('.bubble-row');
+
+    if(range && textBlock.contains(range.startContainer) && !hitBubbleRow){
+      textBlock.focus();
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      refreshPlaceholder();
+      updateCanvasSize();
     } else {
-      deselectBubble();
+      // Nothing usable to land on nearby (e.g. right below a trailing
+      // bubble, which can't hold a caret) — fall back to the end of doc.
+      focusEndOfText();
     }
   });
 
@@ -1370,6 +1805,7 @@
     const row = selectedBubble.closest('.bubble-row');
     row.classList.remove('dir-left', 'dir-right');
     row.classList.add('dir-' + v);
+    applyBubbleCorner(selectedBubble);
     updateCanvasSize();
   });
 
@@ -1382,6 +1818,7 @@
       lastBubbleColor = sw.dataset.bubble;
       if(selectedBubble){
         selectedBubble.style.background = sw.dataset.bubble;
+        selectedBubble.style.setProperty('--bubble-bg', sw.dataset.bubble);
         selectedBubble.dataset.color = sw.dataset.bubble;
       }
     });
@@ -1391,7 +1828,48 @@
     lastBubbleColor = e.target.value;
     if(selectedBubble){
       selectedBubble.style.background = e.target.value;
+      selectedBubble.style.setProperty('--bubble-bg', e.target.value);
       selectedBubble.dataset.color = e.target.value;
+    }
+  });
+
+  $$('#bubbleTextColorSwatches .swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      $$('#bubbleTextColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      $('#bubbleTextColorCustom').value = sw.dataset.bubbletext;
+      syncColorTrigger('bubbleTextColorCustom', sw.dataset.bubbletext);
+      lastBubbleTextColor = sw.dataset.bubbletext;
+      if(selectedBubble){
+        selectedBubble.style.color = sw.dataset.bubbletext;
+        selectedBubble.dataset.textColor = sw.dataset.bubbletext;
+      }
+    });
+  });
+  $('#bubbleTextColorCustom').addEventListener('input', e=>{
+    $$('#bubbleTextColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+    lastBubbleTextColor = e.target.value;
+    if(selectedBubble){
+      selectedBubble.style.color = e.target.value;
+      selectedBubble.dataset.textColor = e.target.value;
+    }
+  });
+
+  $('#bubbleSizeRange').addEventListener('input', (e)=>{
+    lastBubbleSize = +e.target.value;
+    $('#bubbleSizeVal').textContent = e.target.value + '%';
+    if(selectedBubble){
+      selectedBubble.style.fontSize = e.target.value + '%';
+      selectedBubble.dataset.size = e.target.value;
+    }
+  });
+
+  $('#bubbleRadiusRange').addEventListener('input', (e)=>{
+    lastBubbleRadius = +e.target.value;
+    $('#bubbleRadiusVal').textContent = e.target.value + 'px';
+    if(selectedBubble){
+      selectedBubble.dataset.radius = e.target.value;
+      applyBubbleCorner(selectedBubble);
     }
   });
 
@@ -1439,6 +1917,11 @@
     textBlock.style.lineHeight = state.leading + 'px';
     textBlock.style.color = state.textColor;
     textBlock.style.setProperty('--para-gap', state.paraGap + 'px');
+    textBlock.style.setProperty('--title-size', state.titleSize + 'px');
+    textBlock.style.setProperty('--subtitle-size', state.subtitleSize + 'px');
+    textBlock.style.setProperty('--quote-style', state.quoteItalic ? 'italic' : 'normal');
+    textBlock.style.setProperty('--quote-color', state.quoteColor);
+    textBlock.classList.toggle('hide-quote-marks', !state.quoteMarks);
 
     const originMap = { left:'left top', center:'center top', right:'right top', justify:'left top' };
     textBlock.style.transform = `scaleX(${state.skew/100})`;
@@ -1809,6 +2292,7 @@
     btn.textContent = '생성 중…';
     if(document.activeElement) document.activeElement.blur();
     window.getSelection().removeAllRanges();
+    deselectBubble();
 
     // .preview-scale has `transition: transform .12s ease`. Flipping the
     // transform to 'none' does NOT apply instantly — it animates over
@@ -1918,6 +2402,10 @@
     syncSwatch('#textColorSwatches .swatch', 'color', state.textColor, '#textColorCustom');
     syncSwatch('[data-bg]', 'bg', state.bgA, '#bgACustom');
     syncSwatch('[data-bg2]', 'bg2', state.bgB, '#bgBCustom');
+
+    setSegActive('quoteItalicSeg', state.quoteItalic ? 'on' : 'off');
+    setSegActive('quoteMarksSeg', state.quoteMarks ? 'on' : 'off');
+    syncSwatch('#quoteColorSwatches .swatch', 'qc', state.quoteColor, '#qcCustom');
   }
 
   /* ---------------- presets: collapse toggle ---------------- */
@@ -1939,6 +2427,17 @@
   (function(){
     const acc = $('#colorAccordion');
     const head = $('#colorAccordionHead');
+    if(!acc || !head) return;
+    head.addEventListener('click', ()=>{
+      const collapsed = acc.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+  })();
+
+  /* ---------------- quote formatting: collapse toggle ---------------- */
+  (function(){
+    const acc = $('#quoteAccordion');
+    const head = $('#quoteAccordionHead');
     if(!acc || !head) return;
     head.addEventListener('click', ()=>{
       const collapsed = acc.classList.toggle('collapsed');
