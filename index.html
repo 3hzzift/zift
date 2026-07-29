@@ -394,10 +394,21 @@
 
   .swatches{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .swatch{
+    position:relative;
     width:28px; height:28px; border-radius:50%; border:2px solid #fff;
     box-shadow:0 0 0 1px var(--border); cursor:pointer; flex:none;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+    touch-action:manipulation;
+    transition:transform .15s ease, box-shadow .15s ease;
   }
   .swatch.active{ box-shadow:0 0 0 2px var(--accent); }
+  .swatch.swatch-pressing{ transform:scale(1.22); box-shadow:0 0 0 2px var(--accent); }
+  .swatch.swatch-pressing::after{
+    content:''; position:absolute; inset:-7px; border-radius:50%;
+    border:2px solid var(--accent); opacity:.25;
+    animation:swatchPressRing .48s linear forwards;
+  }
+  @keyframes swatchPressRing{ from{ opacity:.12; transform:scale(.55); } to{ opacity:1; transform:scale(1); } }
   .swatch-add{
     width:28px; height:28px; border-radius:50%; border:1px dashed var(--muted);
     background:transparent; color:var(--muted); font-size:15px; line-height:1;
@@ -628,6 +639,8 @@
             </button>
             <div class="accordion-body" id="colorAccordionBody">
 
+              <p class="field-hint" style="margin:-2px 0 14px;">색상을 길게 누르면 원하는 색으로 바꿀 수 있어요.</p>
+
               <p class="section-title">글자색</p>
               <div class="field">
                 <div class="swatches" id="textColorSwatches">
@@ -643,7 +656,7 @@
               <p class="section-title">형광펜</p>
               <div class="field">
                 <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
-                <div class="swatches">
+                <div class="swatches" id="hlColorSwatches">
                   <span class="swatch" data-hl="#FFE066" style="background:#FFE066"></span>
                   <span class="swatch" data-hl="#FFB4C6" style="background:#FFB4C6"></span>
                   <span class="swatch" data-hl="#B7F0D4" style="background:#B7F0D4"></span>
@@ -659,7 +672,7 @@
               <p class="section-title">부분 글자색</p>
               <div class="field">
                 <div class="field-row"><span class="field-label">문장을 드래그로 선택한 뒤 색을 눌러주세요</span></div>
-                <div class="swatches">
+                <div class="swatches" id="tcColorSwatches">
                   <span class="swatch" data-tc="#E5342B" style="background:#E5342B"></span>
                   <span class="swatch" data-tc="#1E6FE0" style="background:#1E6FE0"></span>
                   <span class="swatch" data-tc="#111111" style="background:#111111"></span>
@@ -864,7 +877,7 @@
 
           <div class="field" id="bgAWrap">
             <div class="field-row"><span class="field-label">배경색 A</span></div>
-            <div class="swatches">
+            <div class="swatches" id="bgAColorSwatches">
               <span class="swatch active" data-bg="#F6F4EF" style="background:#F6F4EF"></span>
               <span class="swatch" data-bg="#FFFFFF" style="background:#FFFFFF"></span>
               <span class="swatch" data-bg="#22221F" style="background:#22221F"></span>
@@ -877,7 +890,7 @@
           <div id="bgBWrap" style="display:none;">
             <div class="field">
               <div class="field-row"><span class="field-label">배경색 B</span></div>
-              <div class="swatches">
+              <div class="swatches" id="bgBColorSwatches">
                 <span class="swatch" data-bg2="#EFE9DD" style="background:#EFE9DD"></span>
                 <span class="swatch" data-bg2="#D8E4E1" style="background:#D8E4E1"></span>
                 <span class="swatch active" data-bg2="#33415C" style="background:#33415C"></span>
@@ -922,6 +935,7 @@
     <input type="text" id="cpHexInput" maxlength="6" autocomplete="off" spellcheck="false" inputmode="text">
   </div>
   <button type="button" class="btn primary cp-done" id="cpDone">완료</button>
+  <button type="button" class="btn ghost cp-done" id="cpReset" style="display:none; margin-top:8px; color:var(--danger);">기본 색상으로 되돌리기</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1063,9 +1077,12 @@
     const preview = $('#cpPreview');
     const doneBtn = $('#cpDone');
     const closeBtn = $('#cpClose');
+    const resetBtn = $('#cpReset');
+    const titleEl = $('.cp-title', modal);
     if(!backdrop || !modal) return;
 
     let targetInput = null, targetTrigger = null;
+    let currentOnCommit = null, currentOnReset = null;
     let h = 0, s = 1, v = 1;
     let lastCommitted = null;
 
@@ -1113,17 +1130,24 @@
     }
 
     function commit(){
-      if(!targetInput) return;
       const hex = hsvToHex(h,s,v);
       if(hex === lastCommitted) return;
       lastCommitted = hex;
-      targetInput.value = hex;
-      targetInput.dispatchEvent(new Event('input', { bubbles:true }));
+      if(currentOnCommit){
+        currentOnCommit(hex);
+      } else if(targetInput){
+        targetInput.value = hex;
+        targetInput.dispatchEvent(new Event('input', { bubbles:true }));
+      }
     }
 
     function open(inputEl, triggerEl){
       targetInput = inputEl;
       targetTrigger = triggerEl;
+      currentOnCommit = null;
+      currentOnReset = null;
+      if(resetBtn) resetBtn.style.display = 'none';
+      if(titleEl) titleEl.textContent = '색상 선택';
       const hsv = hexToHsv(inputEl.value);
       h = hsv.h; s = hsv.s; v = hsv.v;
       lastCommitted = hsvToHex(h,s,v);
@@ -1131,11 +1155,32 @@
       backdrop.classList.add('open');
       modal.classList.add('open');
     }
+
+    // Opens the same picker to edit a preset swatch's color directly,
+    // instead of the hidden-input-backed "직접 선택" trigger buttons.
+    // opts: { currentHex, title, onCommit(hex), onReset() }
+    window.openColorPicker = function(opts){
+      targetInput = null;
+      targetTrigger = null;
+      currentOnCommit = opts.onCommit || null;
+      currentOnReset = opts.onReset || null;
+      if(resetBtn) resetBtn.style.display = currentOnReset ? 'block' : 'none';
+      if(titleEl) titleEl.textContent = opts.title || '프리셋 색상 변경';
+      const hsv = hexToHsv(opts.currentHex);
+      h = hsv.h; s = hsv.s; v = hsv.v;
+      lastCommitted = hsvToHex(h,s,v);
+      paint();
+      backdrop.classList.add('open');
+      modal.classList.add('open');
+    };
+
     function close(){
       backdrop.classList.remove('open');
       modal.classList.remove('open');
       targetInput = null;
       targetTrigger = null;
+      currentOnCommit = null;
+      currentOnReset = null;
     }
 
     $$('.cp-trigger').forEach(trigger=>{
@@ -1148,6 +1193,12 @@
     backdrop.addEventListener('click', close);
     closeBtn.addEventListener('click', close);
     doneBtn.addEventListener('click', ()=>{ commit(); close(); });
+    if(resetBtn){
+      resetBtn.addEventListener('click', ()=>{
+        if(currentOnReset) currentOnReset();
+        close();
+      });
+    }
 
     function ratioFromEvent(el, evt){
       const r = el.getBoundingClientRect();
@@ -1200,6 +1251,7 @@
   /* ---------------- text color swatches ---------------- */
   $$('#textColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       $$('#textColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       state.textColor = sw.dataset.color;
@@ -1217,6 +1269,7 @@
   /* ---------------- background swatches ---------------- */
   $$('[data-bg]').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       $$('[data-bg]').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       state.bgA = sw.dataset.bg;
@@ -1232,6 +1285,7 @@
   });
   $$('[data-bg2]').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       $$('[data-bg2]').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       state.bgB = sw.dataset.bg2;
@@ -1264,7 +1318,7 @@
     let range = (sel && sel.rangeCount>0 && !sel.isCollapsed && textBlock.contains(sel.getRangeAt(0).commonAncestorContainer)) ? sel.getRangeAt(0) : savedRange;
     if(!range || range.collapsed){
       showToast('먼저 문장을 드래그해서 선택해주세요');
-      return;
+      return null;
     }
     const mark = document.createElement('mark');
     mark.style.backgroundColor = color;
@@ -1277,16 +1331,35 @@
     window.getSelection().removeAllRanges();
     savedRange = null;
     updateCanvasSize();
+    return mark;
   }
 
   $$('[data-hl]').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       applyHighlight(sw.dataset.hl);
       $('#hlCustom').value = sw.dataset.hl;
       syncColorTrigger('hlCustom', sw.dataset.hl);
     });
   });
-  $('#hlCustom').addEventListener('input', e=> applyHighlight(e.target.value));
+
+  // Custom highlighter picker: once a color is applied, dragging the
+  // picker again used to fail (the text selection had already been
+  // consumed by the first application). Now we keep a reference to the
+  // <mark> just created and simply restyle it on every further drag,
+  // until the picker is reopened for a new selection.
+  let activeHlMark = null;
+  const hlCustomTrigger = document.querySelector('.cp-trigger[data-for="hlCustom"]');
+  if(hlCustomTrigger) hlCustomTrigger.addEventListener('click', ()=>{ activeHlMark = null; });
+  $('#hlCustom').addEventListener('input', e=>{
+    if(activeHlMark){
+      activeHlMark.style.backgroundColor = e.target.value;
+      updateCanvasSize();
+    } else {
+      const mark = applyHighlight(e.target.value);
+      if(mark) activeHlMark = mark;
+    }
+  });
 
   $('#btnHlClear').addEventListener('click', ()=>{
     const sel = window.getSelection();
@@ -1321,7 +1394,7 @@
     const range = getSelRange();
     if(!range || range.collapsed){
       showToast('먼저 문장을 드래그해서 선택해주세요');
-      return;
+      return null;
     }
     const span = document.createElement('span');
     span.className = 'tc';
@@ -1334,16 +1407,32 @@
     window.getSelection().removeAllRanges();
     savedRange = null;
     updateCanvasSize();
+    return span;
   }
 
   $$('[data-tc]').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       applyTextColor(sw.dataset.tc);
       $('#tcCustom').value = sw.dataset.tc;
       syncColorTrigger('tcCustom', sw.dataset.tc);
     });
   });
-  $('#tcCustom').addEventListener('input', e=> applyTextColor(e.target.value));
+
+  // Same fix as the highlighter picker above: keep restyling the same
+  // <span class="tc"> on further drags instead of losing the selection.
+  let activeTcSpan = null;
+  const tcCustomTrigger = document.querySelector('.cp-trigger[data-for="tcCustom"]');
+  if(tcCustomTrigger) tcCustomTrigger.addEventListener('click', ()=>{ activeTcSpan = null; });
+  $('#tcCustom').addEventListener('input', e=>{
+    if(activeTcSpan){
+      activeTcSpan.style.color = e.target.value;
+      updateCanvasSize();
+    } else {
+      const span = applyTextColor(e.target.value);
+      if(span) activeTcSpan = span;
+    }
+  });
 
   $('#btnTcClear').addEventListener('click', ()=>{
     const range = getSelRange();
@@ -1413,6 +1502,7 @@
 
   $$('#underlineColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       $$('#underlineColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       $('#ucCustom').value = sw.dataset.uc;
@@ -1435,6 +1525,7 @@
 
   $$('#quoteColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       $$('#quoteColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       state.quoteColor = sw.dataset.qc;
@@ -1811,6 +1902,7 @@
 
   $$('#bubbleColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       $$('#bubbleColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       $('#bubbleColorCustom').value = sw.dataset.bubble;
@@ -1835,6 +1927,7 @@
 
   $$('#bubbleTextColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
       $$('#bubbleTextColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
       sw.classList.add('active');
       $('#bubbleTextColorCustom').value = sw.dataset.bubbletext;
@@ -2039,6 +2132,7 @@
      are left untouched so tap-to-edit and text selection keep working. */
   let zoomScale = 1, zoomX = 0, zoomY = 0;
   let pinchStartDist = 0, pinchStartScale = 1, pinchStartMid = {x:0,y:0}, pinchStartZ = {x:0,y:0};
+  let isPanning = false, panStartTouch = {x:0,y:0}, panStartZ = {x:0,y:0};
 
   function touchDist(a, b){
     return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
@@ -2053,16 +2147,25 @@
 
   previewFrame.addEventListener('touchstart', (e)=>{
     if(e.touches.length === 2){
+      isPanning = false;
       e.preventDefault();
       pinchStartDist = touchDist(e.touches[0], e.touches[1]);
       pinchStartScale = zoomScale;
       pinchStartMid = touchMid(e.touches[0], e.touches[1]);
       pinchStartZ = { x:zoomX, y:zoomY };
+    } else if(e.touches.length === 1 && zoomScale > 1.02){
+      // Already zoomed in: a single finger now drags the view around
+      // instead of doing nothing (previously only two fingers moved it).
+      e.preventDefault();
+      isPanning = true;
+      panStartTouch = { x:e.touches[0].clientX, y:e.touches[0].clientY };
+      panStartZ = { x:zoomX, y:zoomY };
     }
   }, { passive:false });
 
   previewFrame.addEventListener('touchmove', (e)=>{
     if(e.touches.length === 2){
+      isPanning = false;
       e.preventDefault();
       const dist = touchDist(e.touches[0], e.touches[1]);
       const ratio = dist / (pinchStartDist || dist);
@@ -2071,18 +2174,28 @@
       zoomX = pinchStartZ.x + (mid.x - pinchStartMid.x);
       zoomY = pinchStartZ.y + (mid.y - pinchStartMid.y);
       applyZoomTransform();
+    } else if(e.touches.length === 1 && isPanning){
+      e.preventDefault();
+      zoomX = panStartZ.x + (e.touches[0].clientX - panStartTouch.x);
+      zoomY = panStartZ.y + (e.touches[0].clientY - panStartTouch.y);
+      applyZoomTransform();
     }
   }, { passive:false });
 
-  previewFrame.addEventListener('touchend', (e)=>{
+  function endTouchInteraction(e){
+    if(e.touches.length < 1) isPanning = false;
     if(e.touches.length < 2 && zoomScale <= 1.02){
       zoomScale = 1; zoomX = 0; zoomY = 0;
+      isPanning = false;
       applyZoomTransform();
     }
-  });
+  }
+  previewFrame.addEventListener('touchend', endTouchInteraction);
+  previewFrame.addEventListener('touchcancel', endTouchInteraction);
 
   zoomResetBtn.addEventListener('click', ()=>{
     zoomScale = 1; zoomX = 0; zoomY = 0;
+    isPanning = false;
     applyZoomTransform();
   });
 
@@ -2540,6 +2653,140 @@
       wrap.appendChild(slot);
     }
   }
+
+  /* ---------------- editable color-preset swatches ----------------
+     Every basic color-preset swatch (글자색·형광펜·부분 글자색·강조선·
+     따옴표색·말풍선색·배경색 A/B) can now be long-pressed to open the
+     같은 색상 선택 모달에서 그 스와치만 원하는 색으로 바꿀 수 있다.
+     바뀐 색은 이 브라우저(localStorage)에 저장되어 다음에 다시 열어도
+     유지되고, 모달 안의 '기본 색상으로 되돌리기' 버튼으로 언제든 원래
+     기본 팔레트 색으로 되돌릴 수 있다. */
+  (function(){
+    const STORE_KEY = 'oreo_swatch_overrides_v1';
+
+    const SWATCH_GROUPS = [
+      { key:'textColor',  sel:'#textColorSwatches',       attr:'color',      stateKey:'textColor' },
+      { key:'hl',         sel:'#hlColorSwatches',         attr:'hl',         stateKey:null },
+      { key:'tc',         sel:'#tcColorSwatches',         attr:'tc',         stateKey:null },
+      { key:'uc',         sel:'#underlineColorSwatches',  attr:'uc',         stateKey:'lastUnderlineColor' },
+      { key:'qc',         sel:'#quoteColorSwatches',      attr:'qc',         stateKey:'quoteColor' },
+      { key:'bubble',     sel:'#bubbleColorSwatches',     attr:'bubble',     stateKey:'lastBubbleColor' },
+      { key:'bubbletext', sel:'#bubbleTextColorSwatches', attr:'bubbletext', stateKey:'lastBubbleTextColor' },
+      { key:'bgA',        sel:'#bgAColorSwatches',        attr:'bg',         stateKey:'bgA' },
+      { key:'bgB',        sel:'#bgBColorSwatches',        attr:'bg2',        stateKey:'bgB' }
+    ];
+
+    function loadOverrides(){
+      try{
+        const raw = localStorage.getItem(STORE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+      }catch(e){ return {}; }
+    }
+    let overrides = loadOverrides();
+    function persistOverrides(){
+      try{ localStorage.setItem(STORE_KEY, JSON.stringify(overrides)); }
+      catch(e){ showToast('브라우저에 저장할 수 없어요'); }
+    }
+    function setOverride(groupKey, idx, hex){
+      if(!overrides[groupKey]) overrides[groupKey] = {};
+      overrides[groupKey][idx] = hex;
+      persistOverrides();
+    }
+    function clearOverride(groupKey, idx){
+      if(overrides[groupKey]) delete overrides[groupKey][idx];
+      persistOverrides();
+    }
+
+    // Shared timestamp: while a long-press is being resolved (or was just
+    // resolved into opening the editor), the swatch's own normal click
+    // handler should not also fire and apply that color to a selection.
+    let suppressUntil = 0;
+    window.__isSwatchClickSuppressed = function(){ return Date.now() < suppressUntil; };
+
+    function attachLongPress(sw, onLongPress){
+      const LONG_MS = 480, MOVE_TOL = 10;
+      let timer = null, sx = 0, sy = 0;
+      function cancelPress(){
+        clearTimeout(timer); timer = null;
+        sw.classList.remove('swatch-pressing');
+      }
+      sw.addEventListener('pointerdown', (e)=>{
+        if(e.pointerType === 'mouse' && e.button !== 0) return;
+        sx = e.clientX; sy = e.clientY;
+        sw.classList.add('swatch-pressing');
+        timer = setTimeout(()=>{
+          cancelPress();
+          suppressUntil = Date.now() + 400;
+          try{ if(navigator.vibrate) navigator.vibrate(12); }catch(err){}
+          onLongPress();
+        }, LONG_MS);
+      });
+      sw.addEventListener('pointermove', (e)=>{
+        if(timer==null) return;
+        if(Math.hypot(e.clientX - sx, e.clientY - sy) > MOVE_TOL) cancelPress();
+      });
+      ['pointerup','pointercancel','pointerleave'].forEach(ev=> sw.addEventListener(ev, cancelPress));
+      sw.addEventListener('contextmenu', e=> e.preventDefault());
+    }
+
+    function openSwatchEditor(sw, group, idx){
+      if(!window.openColorPicker) return;
+      window.openColorPicker({
+        currentHex: sw.dataset[group.attr],
+        title: '프리셋 색상 변경',
+        onReset: ()=>{
+          const def = sw.dataset.defaultColor;
+          sw.dataset[group.attr] = def;
+          sw.style.background = def;
+          clearOverride(group.key, idx);
+          if(sw.classList.contains('active')) sw.click();
+          showToast('기본 색상으로 되돌렸어요');
+        },
+        onCommit: (hex)=>{
+          sw.dataset[group.attr] = hex;
+          sw.style.background = hex;
+          setOverride(group.key, idx, hex);
+          if(sw.classList.contains('active')) sw.click();
+        }
+      });
+    }
+
+    SWATCH_GROUPS.forEach(group=>{
+      const container = $(group.sel);
+      if(!container) return;
+      const swatches = $$('.swatch', container);
+      const groupOverrides = overrides[group.key] || {};
+      const wasActiveIdx = swatches.findIndex(sw=> sw.classList.contains('active'));
+
+      swatches.forEach((sw, idx)=>{
+        sw.dataset.defaultColor = (sw.dataset[group.attr] || '').toUpperCase();
+        const saved = groupOverrides[idx];
+        if(saved){
+          sw.dataset[group.attr] = saved;
+          sw.style.background = saved;
+        }
+        attachLongPress(sw, ()=> openSwatchEditor(sw, group, idx));
+      });
+
+      // If the swatch that started out selected has a saved override,
+      // carry its color into whatever currently tracks that group's
+      // "in use" color, so the canvas reflects the saved custom color
+      // right away instead of the factory default.
+      if(wasActiveIdx > -1 && groupOverrides[wasActiveIdx] && group.stateKey){
+        const newColor = groupOverrides[wasActiveIdx];
+        if(group.stateKey in state){
+          state[group.stateKey] = newColor;
+        } else if(group.stateKey === 'lastUnderlineColor'){
+          lastUnderlineColor = newColor;
+        } else if(group.stateKey === 'lastBubbleColor'){
+          lastBubbleColor = newColor;
+        } else if(group.stateKey === 'lastBubbleTextColor'){
+          lastBubbleTextColor = newColor;
+        }
+      }
+    });
+  })();
 
   /* ---------------- init ---------------- */
   refreshPlaceholder();
