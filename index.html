@@ -176,7 +176,12 @@
   .preview-zoom{
     display:flex; align-items:center; justify-content:center;
     transform-origin:center center;
-    touch-action:none;
+    /* touch-action is toggled dynamically in JS (none only while an actual
+       pinch/pan gesture is happening) instead of being fixed to "none"
+       here — a permanently-none ancestor blocks iOS's native text
+       selection handles/magnifier even on touches that never trigger our
+       own pan/zoom logic. */
+    touch-action:auto;
   }
   .zoom-reset-btn{
     position:absolute; top:10px; right:10px; z-index:30;
@@ -2142,6 +2147,13 @@
   let zoomScale = 1, zoomX = 0, zoomY = 0;
   let pinchStartDist = 0, pinchStartScale = 1, pinchStartMid = {x:0,y:0}, pinchStartZ = {x:0,y:0};
   let isPanning = false, panPending = false, panStartTouch = {x:0,y:0}, panStartZ = {x:0,y:0};
+  // Once a touch sequence begins ON the text, this stays true for the whole
+  // sequence (until every finger lifts) — checked instead of re-testing the
+  // touchmove target, because once a native selection handle/magnifier
+  // appears, subsequent touchmove events target that OS-drawn overlay (not
+  // any node inside #textBlock), which previously made isOnText() wrongly
+  // report "not on text" mid-drag and let panning logic hijack the gesture.
+  let textTouchActive = false;
   const PAN_MOVE_TOL = 8;
 
   function touchDist(a, b){
@@ -2157,10 +2169,19 @@
   function isOnText(target){
     return !!(target && target.nodeType && (target.nodeType === 1 ? target.closest('#textBlock') : target.parentElement && target.parentElement.closest('#textBlock')));
   }
+  // touch-action is only forced to "none" for the duration of a real
+  // pinch/pan gesture. Leaving it at "auto" the rest of the time (in
+  // particular for the whole lifetime of any touch that starts on the
+  // text) is required for iOS to draw and let the person drag its native
+  // text-selection handles/magnifier — a permanently-"none" ancestor
+  // suppresses that system UI entirely, even on touches our own JS never
+  // calls preventDefault() on.
+  function setZoomTouchAction(v){ previewZoom.style.touchAction = v; }
 
   previewFrame.addEventListener('touchstart', (e)=>{
     if(e.touches.length === 2){
-      isPanning = false; panPending = false;
+      isPanning = false; panPending = false; textTouchActive = false;
+      setZoomTouchAction('none');
       e.preventDefault();
       pinchStartDist = touchDist(e.touches[0], e.touches[1]);
       pinchStartScale = zoomScale;
@@ -2171,15 +2192,23 @@
       // so it's safe to treat a subsequent drag as panning.
       isPanning = false;
       panPending = true;
+      textTouchActive = false;
+      setZoomTouchAction('none');
       panStartTouch = { x:e.touches[0].clientX, y:e.touches[0].clientY };
       panStartZ = { x:zoomX, y:zoomY };
     } else {
-      // Touch started on the text itself: leave it entirely to the browser.
+      // Touch started on the text itself (or no zoom is active): leave it
+      // entirely to the browser — this includes long-press to select,
+      // dragging out a selection range, and dragging the native selection
+      // handles that appear afterwards.
       isPanning = false; panPending = false;
+      textTouchActive = isOnText(e.target);
+      setZoomTouchAction('auto');
     }
   }, { passive:false });
 
   previewFrame.addEventListener('touchmove', (e)=>{
+    if(textTouchActive) return; // never hijack a gesture that began on text
     if(e.touches.length === 2){
       isPanning = false; panPending = false;
       e.preventDefault();
@@ -2206,7 +2235,10 @@
   }, { passive:false });
 
   function endTouchInteraction(e){
-    if(e.touches.length < 1){ isPanning = false; panPending = false; }
+    if(e.touches.length < 1){
+      isPanning = false; panPending = false; textTouchActive = false;
+      setZoomTouchAction('auto');
+    }
     if(e.touches.length < 2 && zoomScale <= 1.02){
       zoomScale = 1; zoomX = 0; zoomY = 0;
       isPanning = false; panPending = false;
