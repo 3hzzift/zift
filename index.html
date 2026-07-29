@@ -2128,11 +2128,18 @@
 
   /* ---------------- pinch-to-zoom (mobile preview) ----------------
      Independent of the auto-fit scale above: two-finger pinch lets the
-     person zoom into the preview to check detail. Single-finger touches
-     are left untouched so tap-to-edit and text selection keep working. */
+     person zoom into the preview to check detail. When zoomed in, a
+     single finger can drag the view around to reach other parts of the
+     text — but a plain tap (no movement) is left alone so it still
+     reaches the contenteditable normally: tap-to-place-caret, long-press
+     to select, etc. We only commit to "panning" once the finger has
+     actually moved past PAN_MOVE_TOL; until then nothing is
+     preventDefault()'d, so the browser's native touch handling for the
+     text still runs. */
   let zoomScale = 1, zoomX = 0, zoomY = 0;
   let pinchStartDist = 0, pinchStartScale = 1, pinchStartMid = {x:0,y:0}, pinchStartZ = {x:0,y:0};
-  let isPanning = false, panStartTouch = {x:0,y:0}, panStartZ = {x:0,y:0};
+  let isPanning = false, panPending = false, panStartTouch = {x:0,y:0}, panStartZ = {x:0,y:0};
+  const PAN_MOVE_TOL = 8;
 
   function touchDist(a, b){
     return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
@@ -2147,17 +2154,17 @@
 
   previewFrame.addEventListener('touchstart', (e)=>{
     if(e.touches.length === 2){
-      isPanning = false;
+      isPanning = false; panPending = false;
       e.preventDefault();
       pinchStartDist = touchDist(e.touches[0], e.touches[1]);
       pinchStartScale = zoomScale;
       pinchStartMid = touchMid(e.touches[0], e.touches[1]);
       pinchStartZ = { x:zoomX, y:zoomY };
     } else if(e.touches.length === 1 && zoomScale > 1.02){
-      // Already zoomed in: a single finger now drags the view around
-      // instead of doing nothing (previously only two fingers moved it).
-      e.preventDefault();
-      isPanning = true;
+      // Don't decide yet — could still be a tap meant for the text.
+      // No preventDefault here so focus/caret placement isn't blocked.
+      isPanning = false;
+      panPending = true;
       panStartTouch = { x:e.touches[0].clientX, y:e.touches[0].clientY };
       panStartZ = { x:zoomX, y:zoomY };
     }
@@ -2165,7 +2172,7 @@
 
   previewFrame.addEventListener('touchmove', (e)=>{
     if(e.touches.length === 2){
-      isPanning = false;
+      isPanning = false; panPending = false;
       e.preventDefault();
       const dist = touchDist(e.touches[0], e.touches[1]);
       const ratio = dist / (pinchStartDist || dist);
@@ -2174,19 +2181,26 @@
       zoomX = pinchStartZ.x + (mid.x - pinchStartMid.x);
       zoomY = pinchStartZ.y + (mid.y - pinchStartMid.y);
       applyZoomTransform();
-    } else if(e.touches.length === 1 && isPanning){
+    } else if(e.touches.length === 1 && (isPanning || panPending)){
+      const dx = e.touches[0].clientX - panStartTouch.x;
+      const dy = e.touches[0].clientY - panStartTouch.y;
+      if(!isPanning){
+        if(Math.hypot(dx, dy) < PAN_MOVE_TOL) return; // still just a tap so far
+        isPanning = true;
+        panPending = false;
+      }
       e.preventDefault();
-      zoomX = panStartZ.x + (e.touches[0].clientX - panStartTouch.x);
-      zoomY = panStartZ.y + (e.touches[0].clientY - panStartTouch.y);
+      zoomX = panStartZ.x + dx;
+      zoomY = panStartZ.y + dy;
       applyZoomTransform();
     }
   }, { passive:false });
 
   function endTouchInteraction(e){
-    if(e.touches.length < 1) isPanning = false;
+    if(e.touches.length < 1){ isPanning = false; panPending = false; }
     if(e.touches.length < 2 && zoomScale <= 1.02){
       zoomScale = 1; zoomX = 0; zoomY = 0;
-      isPanning = false;
+      isPanning = false; panPending = false;
       applyZoomTransform();
     }
   }
