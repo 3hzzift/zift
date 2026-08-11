@@ -265,6 +265,45 @@
   .bubble-move-handle:active{ cursor:grabbing; }
   .bubble-move-handle svg{ width:16px; height:16px; pointer-events:none; }
 
+  /* ---------- inline paragraph images ---------- */
+  .image-row{
+    position:relative;
+    display:flex; justify-content:center;
+    transition:padding-top .12s ease;
+  }
+  .image-row.row-selected{ padding-top:26px; }
+  .image-row.dragging{ opacity:0.55; }
+  .image-box{
+    position:relative;
+    max-width:100%;
+    cursor:pointer;
+    overflow:hidden;
+    line-height:0;
+  }
+  .image-box img.image-natural{
+    display:block; width:100%; height:auto;
+    -webkit-user-drag:none; user-select:none; pointer-events:none;
+  }
+  .image-box .image-cover{
+    display:none;
+    width:100%; height:100%;
+    background-size:cover; background-repeat:no-repeat; background-position:center;
+  }
+  .image-box.selected{ box-shadow:0 0 0 2px var(--accent); }
+
+  /* Drag handle: only visible while its image is selected. Lets the
+     whole image row be grabbed and dropped between paragraphs. */
+  .image-move-handle{
+    position:absolute; top:0; left:50%; transform:translate(-50%,0);
+    display:none; align-items:center; justify-content:center;
+    width:36px; height:20px; padding:0; border:none; border-radius:7px;
+    background:var(--accent); color:#fff;
+    cursor:grab; touch-action:none; z-index:6;
+  }
+  .image-row.row-selected .image-move-handle{ display:flex; }
+  .image-move-handle:active{ cursor:grabbing; }
+  .image-move-handle svg{ width:16px; height:16px; pointer-events:none; }
+
   .credit-line{
     position:relative; z-index:2;
     width:100%; opacity:0.62; white-space:pre-wrap; word-break:keep-all;
@@ -366,6 +405,21 @@
     padding:8px 6px; border-radius:6px; font-size:12.5px; font-weight:600; cursor:pointer;
   }
   .seg button.active{ background:var(--accent); color:#fff; }
+
+  #paraImageRatioSeg{ flex-wrap:wrap; }
+  #paraImageRatioSeg button{ flex:1 1 30%; }
+
+  .ratio-custom-row{ display:flex; align-items:center; gap:8px; }
+  .ratio-custom-row input[type="number"]{
+    -moz-appearance:textfield; appearance:textfield;
+    flex:1; min-width:0; width:100%; border:1px solid var(--border); border-radius:8px;
+    padding:9px 10px; font-size:13px; font-weight:600; color:var(--ink);
+    background:var(--panel); text-align:center; font-variant-numeric:tabular-nums;
+  }
+  .ratio-custom-row input[type="number"]::-webkit-outer-spin-button,
+  .ratio-custom-row input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .ratio-custom-row input[type="number"]:focus{ outline:none; border-color:var(--accent); }
+  .ratio-custom-row .ratio-custom-sep{ font-size:13px; font-weight:700; color:var(--muted); flex:none; }
 
   .format-btn-row{ display:flex; flex-wrap:wrap; gap:8px; }
   .format-btn{
@@ -556,6 +610,8 @@
               <button class="format-btn" id="btnToggleUnderline" aria-label="강조선 적용·해제"><span class="fmt-u">U</span></button>
               <button class="format-btn" id="btnToggleVline" aria-label="세로 강조선 적용·해제"><span class="fmt-vl"></span></button>
               <button class="format-btn" id="btnToggleQuote" aria-label="인용구 적용·해제"><span class="fmt-q">"</span></button>
+            </div>
+            <div class="format-btn-row" style="margin-top:8px;">
               <button class="format-btn label" id="btnSizeTitle">제목</button>
               <button class="format-btn label" id="btnSizeSubtitle">부제목</button>
               <button class="format-btn label" id="btnSizeBody">본문</button>
@@ -581,26 +637,18 @@
               <button data-value="800">매우 굵게</button>
             </div>
           </div>
+          <p class="section-title">붙여넣기 자동 서식</p>
           <div class="field">
-            <div class="field-row"><span class="field-label">따옴표 자동 서식</span></div>
-            <div class="seg" id="pasteQuoteFormatSeg">
-              <button data-value="on" class="active">켜짐</button>
-              <button data-value="off">꺼짐</button>
+            <div class="format-btn-row">
+              <button class="format-btn label active" id="btnPasteQuoteFormat">따옴표</button>
+              <button class="format-btn label active" id="btnPasteItalicFormat">기울임</button>
             </div>
-            <div class="field-row" id="pasteQuoteModeRow" style="margin-top:10px;"><span class="field-label">적용 방식</span></div>
+            <div class="field-row" id="pasteQuoteModeRow" style="margin-top:12px;"><span class="field-label">따옴표 적용 방식</span></div>
             <div class="seg" id="pasteQuoteModeSeg">
               <button data-value="quote" class="active">따옴표</button>
               <button data-value="bubble">말풍선</button>
             </div>
-            <p class="field-hint">켜두면 붙여넣을 때 " "나 “ ”로 감싼 부분에 따옴표 서식이 자동으로 적용돼요. 한 줄 전체가 통째로 감싸져 있으면 말풍선으로도 만들 수 있어요(문장 중간의 따옴표는 항상 따옴표 서식이 돼요).</p>
-          </div>
-          <div class="field">
-            <div class="field-row"><span class="field-label">기울임 자동 서식</span></div>
-            <div class="seg" id="pasteItalicFormatSeg">
-              <button data-value="on" class="active">켜짐</button>
-              <button data-value="off">꺼짐</button>
-            </div>
-            <p class="field-hint">켜두면 붙여넣을 때 *기울임*으로 감싼 부분이 자동으로 기울임체가 돼요.</p>
+            <p class="field-hint">버튼을 다시 누르면 꺼져요. 켜두면 붙여넣을 때 " "나 “ ”로 감싼 부분은 따옴표 서식(또는 한 줄 전체가 통째로 감싸져 있으면 말풍선)으로, *기울임*으로 감싼 부분은 기울임체로 자동 적용돼요.</p>
           </div>
 
           <div class="divider"></div>
@@ -618,36 +666,47 @@
 
           <div class="divider"></div>
 
-          <p class="section-title">간격 디테일</p>
-          <div class="field">
-            <div class="field-row"><span class="field-label">본문 크기</span><span class="field-value" id="sizeVal">26px</span></div>
-            <input type="range" id="sizeRange" min="8" max="72" step="1" value="26">
-          </div>
-          <div class="field">
-            <div class="field-row"><span class="field-label">제목 크기</span><span class="field-value" id="titleSizeVal">40px</span></div>
-            <input type="range" id="titleSizeRange" min="20" max="96" step="1" value="40">
-            <p class="field-hint">문장을 드래그로 선택한 뒤 '제목' 버튼을 누르면 이 크기가 적용돼요.</p>
-          </div>
-          <div class="field">
-            <div class="field-row"><span class="field-label">부제목 크기</span><span class="field-value" id="subtitleSizeVal">32px</span></div>
-            <input type="range" id="subtitleSizeRange" min="16" max="80" step="1" value="32">
-            <p class="field-hint">문장을 드래그로 선택한 뒤 '부제목' 버튼을 누르면 이 크기가 적용돼요.</p>
-          </div>
-          <div class="field">
-            <div class="field-row"><span class="field-label">자간</span><span class="field-value" id="trackVal">0px</span></div>
-            <input type="range" id="trackRange" min="-4" max="12" step="0.5" value="0">
-          </div>
-          <div class="field">
-            <div class="field-row"><span class="field-label">행간</span><span class="field-value" id="leadVal">40px</span></div>
-            <input type="range" id="leadRange" min="18" max="100" step="1" value="40">
-          </div>
-          <div class="field">
-            <div class="field-row"><span class="field-label">문단 간격</span><span class="field-value" id="paraVal">16px</span></div>
-            <input type="range" id="paraRange" min="0" max="70" step="1" value="16">
-          </div>
-          <div class="field">
-            <div class="field-row"><span class="field-label">장평</span><span class="field-value" id="skewVal">100%</span></div>
-            <input type="range" id="skewRange" min="80" max="120" step="1" value="100">
+          <div class="accordion collapsed" id="spacingAccordion">
+            <button type="button" class="accordion-head" id="spacingAccordionHead" aria-expanded="false">
+              <span class="section-title" style="margin:0;">간격 디테일</span>
+              <span class="accordion-caret">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </span>
+            </button>
+            <div class="accordion-body" id="spacingAccordionBody">
+
+              <div class="field">
+                <div class="field-row"><span class="field-label">본문 크기</span><span class="field-value" id="sizeVal">26px</span></div>
+                <input type="range" id="sizeRange" min="8" max="72" step="1" value="26">
+              </div>
+              <div class="field">
+                <div class="field-row"><span class="field-label">제목 크기</span><span class="field-value" id="titleSizeVal">40px</span></div>
+                <input type="range" id="titleSizeRange" min="20" max="96" step="1" value="40">
+                <p class="field-hint">문장을 드래그로 선택한 뒤 '제목' 버튼을 누르면 이 크기가 적용돼요.</p>
+              </div>
+              <div class="field">
+                <div class="field-row"><span class="field-label">부제목 크기</span><span class="field-value" id="subtitleSizeVal">32px</span></div>
+                <input type="range" id="subtitleSizeRange" min="16" max="80" step="1" value="32">
+                <p class="field-hint">문장을 드래그로 선택한 뒤 '부제목' 버튼을 누르면 이 크기가 적용돼요.</p>
+              </div>
+              <div class="field">
+                <div class="field-row"><span class="field-label">자간</span><span class="field-value" id="trackVal">0px</span></div>
+                <input type="range" id="trackRange" min="-4" max="12" step="0.5" value="0">
+              </div>
+              <div class="field">
+                <div class="field-row"><span class="field-label">행간</span><span class="field-value" id="leadVal">40px</span></div>
+                <input type="range" id="leadRange" min="18" max="100" step="1" value="40">
+              </div>
+              <div class="field">
+                <div class="field-row"><span class="field-label">문단 간격</span><span class="field-value" id="paraVal">16px</span></div>
+                <input type="range" id="paraRange" min="0" max="70" step="1" value="16">
+              </div>
+              <div class="field">
+                <div class="field-row"><span class="field-label">장평</span><span class="field-value" id="skewVal">100%</span></div>
+                <input type="range" id="skewRange" min="80" max="120" step="1" value="100">
+              </div>
+
+            </div>
           </div>
 
           <div class="divider"></div>
@@ -829,6 +888,65 @@
 
             <div class="field-row" style="margin-top:14px;">
               <button class="btn ghost" id="btnBubbleDelete" style="width:100%; padding:9px 12px; font-size:12.5px; color:var(--danger);">이 말풍선 삭제</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">이미지 삽입</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">문단 사이에 넣을 위치에 커서를 두고 눌러주세요</span></div>
+            <div class="field-row" style="margin-top:10px;">
+              <button class="btn ghost" id="btnInsertParaImage" style="width:100%; padding:9px 12px; font-size:12.5px;">커서 위치에 사진 삽입</button>
+            </div>
+            <input type="file" id="paraImageInput" accept="image/*" style="display:none;">
+          </div>
+          <div class="field" id="paraImageEditWrap" style="display:none;">
+            <div class="field-row"><span class="field-label">선택된 이미지</span></div>
+            <div class="field-row" style="margin-top:10px; gap:8px;">
+              <div class="seg" id="paraImageMoveSeg" style="flex:0 0 auto;">
+                <button type="button" id="btnParaImageMoveUp" aria-label="이미지 위로 이동" style="padding:8px 12px;">▲</button>
+                <button type="button" id="btnParaImageMoveDown" aria-label="이미지 아래로 이동" style="padding:8px 12px;">▼</button>
+              </div>
+            </div>
+            <p class="field-hint" style="margin-top:2px;">이미지 위 손잡이(⠿)를 끌어도 문단 사이로 옮길 수 있어요.</p>
+
+            <div class="field-row" style="margin-top:16px;"><span class="field-label">이미지 크기</span><span class="field-value" id="paraImageWidthVal">100%</span></div>
+            <input type="range" id="paraImageWidthRange" min="20" max="100" step="1" value="100">
+
+            <div class="field-row" style="margin-top:16px;"><span class="field-label">비율 · 보여줄 영역</span></div>
+            <div class="seg" id="paraImageRatioSeg">
+              <button data-value="auto" class="active">자동</button>
+              <button data-value="1:1">1:1</button>
+              <button data-value="4:3">4:3</button>
+              <button data-value="3:4">3:4</button>
+              <button data-value="16:9">16:9</button>
+              <button data-value="9:16">9:16</button>
+              <button data-value="custom">직접</button>
+            </div>
+            <p class="field-hint">자동은 사진 원본 비율 그대로 보여줘요. 비율을 고르면 그 틀에 맞춰 사진이 잘려 보이고, 아래에서 어느 부분을 보여줄지 조절할 수 있어요.</p>
+
+            <div id="paraImageCustomRatioWrap" style="display:none; margin-top:10px;">
+              <div class="ratio-custom-row">
+                <input type="number" id="paraImageCustomW" min="1" max="999" step="1" value="4" inputmode="numeric" aria-label="가로 비율">
+                <span class="ratio-custom-sep">:</span>
+                <input type="number" id="paraImageCustomH" min="1" max="999" step="1" value="5" inputmode="numeric" aria-label="세로 비율">
+              </div>
+            </div>
+
+            <div id="paraImagePosWrap" style="display:none;">
+              <div class="field-row" style="margin-top:10px;"><span class="field-label">가로 위치</span><span class="field-value" id="paraImagePosXVal">50%</span></div>
+              <input type="range" id="paraImagePosXRange" min="0" max="100" step="1" value="50">
+              <div class="field-row" style="margin-top:14px;"><span class="field-label">세로 위치</span><span class="field-value" id="paraImagePosYVal">50%</span></div>
+              <input type="range" id="paraImagePosYRange" min="0" max="100" step="1" value="50">
+            </div>
+
+            <div class="field-row" style="margin-top:16px;"><span class="field-label">모서리 둥글기</span><span class="field-value" id="paraImageRadiusVal">12px</span></div>
+            <input type="range" id="paraImageRadiusRange" min="0" max="60" step="1" value="12">
+            <p class="field-hint">둥글기 설정은 이 브라우저에 저장되어 다음에 사진을 넣을 때도 그대로 유지돼요.</p>
+
+            <div class="field-row" style="margin-top:14px;">
+              <button class="btn ghost" id="btnParaImageDelete" style="width:100%; padding:9px 12px; font-size:12.5px; color:var(--danger);">이 이미지 삭제</button>
             </div>
           </div>
 
@@ -1081,13 +1199,17 @@
   bindSeg('weightSeg', v=>{ state.weight = +v; applyTextStyles(); });
   bindSeg('alignSeg', v=>{ state.align = v; applyTextStyles(); });
   bindSeg('ratioSeg', v=>{ state.ratio = v; updateCanvasSize(); });
-  bindSeg('pasteQuoteFormatSeg', v=>{
-    state.pasteQuoteFormat = (v === 'on');
-    updatePasteQuoteModeVisibility();
-    persistPasteFormatSettings();
-  });
+  function bindPasteToggle(btn, key, onAfter){
+    btn.addEventListener('click', ()=>{
+      state[key] = !state[key];
+      btn.classList.toggle('active', state[key]);
+      if(onAfter) onAfter();
+      persistPasteFormatSettings();
+    });
+  }
+  bindPasteToggle($('#btnPasteQuoteFormat'), 'pasteQuoteFormat', updatePasteQuoteModeVisibility);
+  bindPasteToggle($('#btnPasteItalicFormat'), 'pasteItalicFormat');
   bindSeg('pasteQuoteModeSeg', v=>{ state.pasteQuoteFormatMode = v; persistPasteFormatSettings(); });
-  bindSeg('pasteItalicFormatSeg', v=>{ state.pasteItalicFormat = (v === 'on'); persistPasteFormatSettings(); });
   function updatePasteQuoteModeVisibility(){
     const row = $('#pasteQuoteModeRow');
     const seg = $('#pasteQuoteModeSeg');
@@ -1699,6 +1821,25 @@
   let lastBubbleSize = 92;
   let lastBubbleRadius = 18;
 
+  /* ---------------- paragraph image: default corner radius ----------------
+     Only the corner-roundness default is remembered across visits (applied
+     to every newly inserted image) - loaded once at startup and saved to
+     localStorage whenever the radius slider changes. */
+  let selectedImageBox = null;
+  let lastImageRadius = 12;
+  const IMAGE_RADIUS_KEY = 'oreo_para_image_radius_v1';
+  (function loadImageRadius(){
+    try{
+      const raw = localStorage.getItem(IMAGE_RADIUS_KEY);
+      const n = raw !== null ? parseInt(raw, 10) : NaN;
+      if(!isNaN(n)) lastImageRadius = n;
+    }catch(e){ /* ignore corrupt/unavailable storage */ }
+  })();
+  function persistImageRadius(){
+    try{ localStorage.setItem(IMAGE_RADIUS_KEY, String(lastImageRadius)); }
+    catch(e){ showToast('브라우저에 저장할 수 없어요'); }
+  }
+
   // Keeps the "flap" corner (the little flat point that makes a bubble
   // look like it's pointing at its row's edge) proportional whenever the
   // roundness slider or the left/right direction changes — border-radius
@@ -1883,6 +2024,7 @@
   $('#btnMakeBubble').addEventListener('click', convertSelectionToBubble);
 
   function selectBubble(bubble){
+    deselectImageBox();
     if(selectedBubble && selectedBubble !== bubble){
       selectedBubble.classList.remove('selected');
       const prevRow = selectedBubble.closest('.bubble-row');
@@ -1942,7 +2084,7 @@
   // place a caret past it on their own.
   function focusEndOfText(){
     let last = textBlock.lastElementChild;
-    if(!last || last.classList.contains('bubble-row')){
+    if(!last || last.classList.contains('bubble-row') || last.classList.contains('image-row')){
       const p = document.createElement('div');
       p.appendChild(document.createElement('br'));
       textBlock.appendChild(p);
@@ -1965,12 +2107,18 @@
       selectBubble(b);
       return;
     }
+    const imgBox = e.target.closest('.image-box');
+    if(imgBox && textBlock.contains(imgBox)){
+      selectImageBox(imgBox);
+      return;
+    }
     deselectBubble();
+    deselectImageBox();
     // e.target === textBlock only happens when the click missed every real
-    // paragraph/bubble box — e.g. the vertical gap between two paragraphs,
-    // or the empty area below the last one. In every other case the click
-    // already landed inside a paragraph and the browser placed the caret
-    // there correctly on its own, so we leave it alone.
+    // paragraph/bubble/image box — e.g. the vertical gap between two
+    // paragraphs, or the empty area below the last one. In every other case
+    // the click already landed inside a paragraph and the browser placed
+    // the caret there correctly on its own, so we leave it alone.
     if(e.target !== textBlock) return;
 
     // Use the browser's own point→caret lookup so a click in a gap between
@@ -1991,7 +2139,7 @@
 
     const landedNode = range && range.startContainer;
     const landedEl = landedNode && (landedNode.nodeType === 1 ? landedNode : landedNode.parentElement);
-    const hitBubbleRow = landedEl && landedEl.closest && landedEl.closest('.bubble-row');
+    const hitBubbleRow = landedEl && landedEl.closest && (landedEl.closest('.bubble-row') || landedEl.closest('.image-row'));
 
     if(range && textBlock.contains(range.startContainer) && !hitBubbleRow){
       textBlock.focus();
@@ -2092,6 +2240,339 @@
     row.replaceWith(wrapper);
     selectedBubble = null;
     $('#bubbleEditWrap').style.display = 'none';
+    refreshPlaceholder();
+    updateCanvasSize();
+  });
+
+  /* ---------------- paragraph images ----------------
+     A photo can be dropped in between paragraphs, the same way a bubble
+     is: it becomes its own top-level row inside #textBlock, can be
+     selected by tapping it, dragged by its handle, or nudged up/down with
+     the ▲▼ buttons. Cropping ("비율") uses a background-image div rather
+     than object-fit on the <img>, matching how the canvas background photo
+     is already rendered — that's the technique already proven to export
+     correctly through html2canvas in this app. */
+  function makeImageHandle(row){
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'image-move-handle';
+    handle.setAttribute('aria-label', '이미지 위치 이동 손잡이');
+    handle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
+    row.appendChild(handle);
+    bindImageDrag(handle, row);
+    return handle;
+  }
+
+  function bindImageDrag(handle, row){
+    let dragging = false;
+    let pointerId = null;
+
+    function onPointerMove(e){
+      if(!dragging) return;
+      e.preventDefault();
+      const y = e.clientY;
+      const siblings = Array.from(textBlock.children).filter(el=> el !== row);
+      let target = null;
+      for(const sib of siblings){
+        const rect = sib.getBoundingClientRect();
+        if(y < rect.top + rect.height / 2){ target = sib; break; }
+      }
+      if(target){
+        if(row.nextSibling !== target) textBlock.insertBefore(row, target);
+      } else if(textBlock.lastChild !== row){
+        textBlock.appendChild(row);
+      }
+      updateCanvasSize();
+    }
+
+    function onPointerUp(){
+      if(!dragging) return;
+      dragging = false;
+      row.classList.remove('dragging');
+      if(pointerId !== null && handle.releasePointerCapture){
+        try{ handle.releasePointerCapture(pointerId); }catch(err){}
+      }
+      pointerId = null;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      refreshPlaceholder();
+      updateCanvasSize();
+    }
+
+    handle.addEventListener('pointerdown', (e)=>{
+      e.preventDefault();
+      normalizeTopLevelParagraphs();
+      dragging = true;
+      pointerId = e.pointerId;
+      row.classList.add('dragging');
+      if(handle.setPointerCapture){
+        try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+      }
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
+    });
+  }
+
+  function createImageRow(src){
+    const row = document.createElement('div');
+    row.className = 'image-row';
+    row.contentEditable = 'false';
+
+    const box = document.createElement('div');
+    box.className = 'image-box';
+    box.dataset.width = '100';
+    box.dataset.ratio = 'auto';
+    box.dataset.customW = '4';
+    box.dataset.customH = '5';
+    box.dataset.posX = '50';
+    box.dataset.posY = '50';
+    box.dataset.radius = String(lastImageRadius);
+
+    const img = document.createElement('img');
+    img.className = 'image-natural';
+    img.src = src;
+    img.draggable = false;
+    img.alt = '';
+
+    const cover = document.createElement('div');
+    cover.className = 'image-cover';
+    cover.style.backgroundImage = 'url(' + src + ')';
+
+    box.appendChild(img);
+    box.appendChild(cover);
+    row.appendChild(box);
+    return { row, box };
+  }
+
+  function applyImageBox(box){
+    if(!box) return;
+    const img = box.querySelector('.image-natural');
+    const cover = box.querySelector('.image-cover');
+    const width = box.dataset.width || '100';
+    box.style.width = width + '%';
+
+    const ratio = box.dataset.ratio || 'auto';
+    if(ratio === 'auto'){
+      box.style.aspectRatio = '';
+      img.style.display = 'block';
+      cover.style.display = 'none';
+    } else {
+      let w, h;
+      if(ratio === 'custom'){
+        w = Math.max(1, Math.min(999, (+box.dataset.customW || 1)));
+        h = Math.max(1, Math.min(999, (+box.dataset.customH || 1)));
+      } else {
+        const parts = ratio.split(':').map(Number);
+        w = parts[0]; h = parts[1];
+      }
+      box.style.aspectRatio = w + ' / ' + h;
+      img.style.display = 'none';
+      cover.style.display = 'block';
+      const px = box.dataset.posX || '50';
+      const py = box.dataset.posY || '50';
+      cover.style.backgroundPosition = px + '% ' + py + '%';
+    }
+
+    const radius = box.dataset.radius != null ? box.dataset.radius : lastImageRadius;
+    box.style.borderRadius = radius + 'px';
+  }
+
+  function updateImagePosVisibility(){
+    const wrap = $('#paraImagePosWrap');
+    const customWrap = $('#paraImageCustomRatioWrap');
+    const ratio = selectedImageBox ? (selectedImageBox.dataset.ratio || 'auto') : 'auto';
+    if(wrap) wrap.style.display = (ratio !== 'auto') ? 'block' : 'none';
+    if(customWrap) customWrap.style.display = (ratio === 'custom') ? 'block' : 'none';
+  }
+
+  function selectImageBox(box){
+    deselectBubble();
+    if(selectedImageBox && selectedImageBox !== box){
+      selectedImageBox.classList.remove('selected');
+      const prevRow = selectedImageBox.closest('.image-row');
+      if(prevRow) prevRow.classList.remove('row-selected');
+    }
+    selectedImageBox = box;
+    box.classList.add('selected');
+    $('#paraImageEditWrap').style.display = 'block';
+    const row = box.closest('.image-row');
+    row.classList.add('row-selected');
+
+    const width = box.dataset.width || '100';
+    $('#paraImageWidthRange').value = width;
+    $('#paraImageWidthVal').textContent = width + '%';
+
+    setSegActive('paraImageRatioSeg', box.dataset.ratio || 'auto');
+    $('#paraImageCustomW').value = box.dataset.customW || '4';
+    $('#paraImageCustomH').value = box.dataset.customH || '5';
+
+    const posX = box.dataset.posX || '50';
+    const posY = box.dataset.posY || '50';
+    $('#paraImagePosXRange').value = posX;
+    $('#paraImagePosXVal').textContent = posX + '%';
+    $('#paraImagePosYRange').value = posY;
+    $('#paraImagePosYVal').textContent = posY + '%';
+
+    const radius = box.dataset.radius != null ? box.dataset.radius : lastImageRadius;
+    $('#paraImageRadiusRange').value = radius;
+    $('#paraImageRadiusVal').textContent = radius + 'px';
+
+    updateImagePosVisibility();
+  }
+
+  function deselectImageBox(){
+    if(selectedImageBox){
+      selectedImageBox.classList.remove('selected');
+      const row = selectedImageBox.closest('.image-row');
+      if(row) row.classList.remove('row-selected');
+    }
+    selectedImageBox = null;
+    $('#paraImageEditWrap').style.display = 'none';
+  }
+
+  function insertImageAtCursor(src){
+    normalizeTopLevelParagraphs();
+    const { row, box } = createImageRow(src);
+
+    const range = getSelRange();
+    let inserted = false;
+    if(range){
+      try{
+        const r = range.cloneRange();
+        r.collapse(true);
+        r.insertNode(row);
+        inserted = true;
+      }catch(e){ inserted = false; }
+    }
+    if(!inserted) textBlock.appendChild(row);
+
+    promoteToTopLevel(row);
+    makeImageHandle(row);
+    applyImageBox(box);
+
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    refreshPlaceholder();
+    updateCanvasSize();
+    selectImageBox(box);
+    showToast('사진을 넣었어요');
+  }
+
+  $('#btnInsertParaImage').addEventListener('click', ()=> $('#paraImageInput').click());
+  $('#paraImageInput').addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(!file.type || !file.type.startsWith('image/')){
+      showToast('이미지 파일만 선택할 수 있어요');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      insertImageAtCursor(ev.target.result);
+      e.target.value = '';
+    };
+    reader.onerror = ()=>{
+      showToast('이미지를 불러오지 못했어요');
+      e.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $('#paraImageWidthRange').addEventListener('input', (e)=>{
+    const v = e.target.value;
+    $('#paraImageWidthVal').textContent = v + '%';
+    if(selectedImageBox){
+      selectedImageBox.dataset.width = v;
+      applyImageBox(selectedImageBox);
+      updateCanvasSize();
+    }
+  });
+
+  bindSeg('paraImageRatioSeg', v=>{
+    if(!selectedImageBox) return;
+    selectedImageBox.dataset.ratio = v;
+    if(v === 'custom'){
+      $('#paraImageCustomW').value = selectedImageBox.dataset.customW || '4';
+      $('#paraImageCustomH').value = selectedImageBox.dataset.customH || '5';
+    }
+    applyImageBox(selectedImageBox);
+    updateImagePosVisibility();
+    updateCanvasSize();
+  });
+
+  function applyCustomRatioInput(){
+    if(!selectedImageBox) return;
+    let w = Math.round(+$('#paraImageCustomW').value);
+    let h = Math.round(+$('#paraImageCustomH').value);
+    if(!isFinite(w) || w < 1) w = 1;
+    if(!isFinite(h) || h < 1) h = 1;
+    w = Math.min(999, w);
+    h = Math.min(999, h);
+    selectedImageBox.dataset.customW = String(w);
+    selectedImageBox.dataset.customH = String(h);
+    if(selectedImageBox.dataset.ratio === 'custom'){
+      applyImageBox(selectedImageBox);
+      updateCanvasSize();
+    }
+  }
+  $('#paraImageCustomW').addEventListener('input', applyCustomRatioInput);
+  $('#paraImageCustomH').addEventListener('input', applyCustomRatioInput);
+  $('#paraImageCustomW').addEventListener('blur', (e)=>{ if(!e.target.value) e.target.value = selectedImageBox ? (selectedImageBox.dataset.customW || '4') : '4'; });
+  $('#paraImageCustomH').addEventListener('blur', (e)=>{ if(!e.target.value) e.target.value = selectedImageBox ? (selectedImageBox.dataset.customH || '5') : '5'; });
+
+  $('#paraImagePosXRange').addEventListener('input', (e)=>{
+    const v = e.target.value;
+    $('#paraImagePosXVal').textContent = v + '%';
+    if(selectedImageBox){
+      selectedImageBox.dataset.posX = v;
+      applyImageBox(selectedImageBox);
+    }
+  });
+  $('#paraImagePosYRange').addEventListener('input', (e)=>{
+    const v = e.target.value;
+    $('#paraImagePosYVal').textContent = v + '%';
+    if(selectedImageBox){
+      selectedImageBox.dataset.posY = v;
+      applyImageBox(selectedImageBox);
+    }
+  });
+
+  $('#paraImageRadiusRange').addEventListener('input', (e)=>{
+    const v = +e.target.value;
+    $('#paraImageRadiusVal').textContent = v + 'px';
+    lastImageRadius = v;
+    persistImageRadius();
+    if(selectedImageBox){
+      selectedImageBox.dataset.radius = String(v);
+      applyImageBox(selectedImageBox);
+    }
+  });
+
+  function moveSelectedImage(dir){
+    if(!selectedImageBox) return;
+    normalizeTopLevelParagraphs();
+    const row = selectedImageBox.closest('.image-row');
+    if(dir === 'up'){
+      const prev = row.previousElementSibling;
+      if(prev) textBlock.insertBefore(row, prev);
+    } else {
+      const next = row.nextElementSibling;
+      if(next) textBlock.insertBefore(next, row);
+    }
+    updateCanvasSize();
+  }
+  $('#btnParaImageMoveUp').addEventListener('click', ()=> moveSelectedImage('up'));
+  $('#btnParaImageMoveDown').addEventListener('click', ()=> moveSelectedImage('down'));
+
+  $('#btnParaImageDelete').addEventListener('click', ()=>{
+    if(!selectedImageBox) return;
+    const row = selectedImageBox.closest('.image-row');
+    row.remove();
+    selectedImageBox = null;
+    $('#paraImageEditWrap').style.display = 'none';
     refreshPlaceholder();
     updateCanvasSize();
   });
@@ -2312,7 +2793,9 @@
 
   /* ---------------- placeholder handling ---------------- */
   function refreshPlaceholder(){
-    const empty = textBlock.textContent.trim().length === 0;
+    const hasText = textBlock.textContent.trim().length > 0;
+    const hasMedia = !!textBlock.querySelector('.image-row, .bubble-row');
+    const empty = !hasText && !hasMedia;
     textBlock.setAttribute('data-empty', empty ? 'true' : 'false');
   }
   textBlock.addEventListener('input', ()=>{ refreshPlaceholder(); updateCanvasSize(); });
@@ -2522,6 +3005,7 @@
     if(document.activeElement) document.activeElement.blur();
     window.getSelection().removeAllRanges();
     deselectBubble();
+    deselectImageBox();
 
     // .preview-scale has `transition: transform .12s ease`. Flipping the
     // transform to 'none' does NOT apply instantly — it animates over
@@ -2626,9 +3110,9 @@
     syncSwatch('[data-bg]', 'bg', state.bgA, '#bgACustom');
     syncSwatch('[data-bg2]', 'bg2', state.bgB, '#bgBCustom');
 
-    setSegActive('pasteQuoteFormatSeg', state.pasteQuoteFormat ? 'on' : 'off');
+    $('#btnPasteQuoteFormat').classList.toggle('active', state.pasteQuoteFormat);
+    $('#btnPasteItalicFormat').classList.toggle('active', state.pasteItalicFormat);
     setSegActive('pasteQuoteModeSeg', state.pasteQuoteFormatMode);
-    setSegActive('pasteItalicFormatSeg', state.pasteItalicFormat ? 'on' : 'off');
     updatePasteQuoteModeVisibility();
     setSegActive('quoteItalicSeg', state.quoteItalic ? 'on' : 'off');
     setSegActive('quoteMarksSeg', state.quoteMarks ? 'on' : 'off');
@@ -2647,6 +3131,20 @@
     head.addEventListener('click', toggle);
     head.addEventListener('keydown', (e)=>{
       if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+    });
+  })();
+
+  /* ---------------- spacing detail: collapse toggle ---------------- */
+  (function(){
+    const acc = $('#spacingAccordion');
+    const head = $('#spacingAccordionHead');
+    if(!acc || !head) return;
+    head.addEventListener('click', ()=>{
+      const collapsed = acc.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+    head.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); head.click(); }
     });
   })();
 
@@ -2906,6 +3404,8 @@
   })();
 
   /* ---------------- init ---------------- */
+  $('#paraImageRadiusRange').value = lastImageRadius;
+  $('#paraImageRadiusVal').textContent = lastImageRadius + 'px';
   refreshPlaceholder();
   syncUIFromState();
   applyTextStyles();
