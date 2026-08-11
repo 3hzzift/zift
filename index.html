@@ -511,7 +511,7 @@
     </div>
 
     <div class="panel" id="panel">
-      <div class="sheet-handle" id="sheetHandle" role="button" tabindex="0" aria-label="패널 크기 조절, 위아래로 드래그하거나 눌러서 전환">
+      <div class="sheet-handle" id="sheetHandle" role="button" tabindex="0" aria-label="패널 크기 조절, 위아래로 드래그하세요">
         <span class="sheet-handle-bar"></span>
       </div>
 
@@ -582,12 +582,25 @@
             </div>
           </div>
           <div class="field">
-            <div class="field-row"><span class="field-label">붙여넣기 자동 서식</span></div>
-            <div class="seg" id="pasteAutoFormatSeg">
+            <div class="field-row"><span class="field-label">따옴표 자동 서식</span></div>
+            <div class="seg" id="pasteQuoteFormatSeg">
               <button data-value="on" class="active">켜짐</button>
               <button data-value="off">꺼짐</button>
             </div>
-            <p class="field-hint">켜두면 붙여넣을 때 " "가 “ ”로, *기울임*이 자동으로 기울임체로 바뀌어요.</p>
+            <div class="field-row" id="pasteQuoteModeRow" style="margin-top:10px;"><span class="field-label">적용 방식</span></div>
+            <div class="seg" id="pasteQuoteModeSeg">
+              <button data-value="quote" class="active">따옴표</button>
+              <button data-value="bubble">말풍선</button>
+            </div>
+            <p class="field-hint">켜두면 붙여넣을 때 " "나 “ ”로 감싼 부분에 따옴표 서식이 자동으로 적용돼요. 한 줄 전체가 통째로 감싸져 있으면 말풍선으로도 만들 수 있어요(문장 중간의 따옴표는 항상 따옴표 서식이 돼요).</p>
+          </div>
+          <div class="field">
+            <div class="field-row"><span class="field-label">기울임 자동 서식</span></div>
+            <div class="seg" id="pasteItalicFormatSeg">
+              <button data-value="on" class="active">켜짐</button>
+              <button data-value="off">꺼짐</button>
+            </div>
+            <p class="field-hint">켜두면 붙여넣을 때 *기울임*으로 감싼 부분이 자동으로 기울임체가 돼요.</p>
           </div>
 
           <div class="divider"></div>
@@ -717,7 +730,7 @@
                   <span class="swatch" data-vl="#FFE066" style="background:#FFE066"></span>
                   <input type="hidden" id="vlCustom" value="#2f6fed"><button type="button" class="cp-trigger" data-for="vlCustom" aria-label="세로 강조선 색 직접 선택"></button>
                 </div>
-                <p class="field-hint">색을 바꾸면 이미 적용된 세로 강조선까지 한 번에 바뀌어요.</p>
+                <p class="field-hint">문장을 드래그해서 선택한 뒤 색을 고르면 그 강조선만 바뀌어요. 선택 없이 고르면 다음에 새로 적용할 강조선의 기본 색이 돼요.</p>
               </div>
 
             </div>
@@ -1005,7 +1018,9 @@
     quoteItalic: true,
     quoteColor: '#8C8C8C',
     quoteMarks: true,
-    pasteAutoFormat: true
+    pasteQuoteFormat: true,
+    pasteQuoteFormatMode: 'quote',
+    pasteItalicFormat: true
   };
 
   function showToast(msg){
@@ -1040,7 +1055,19 @@
   bindSeg('weightSeg', v=>{ state.weight = +v; applyTextStyles(); });
   bindSeg('alignSeg', v=>{ state.align = v; applyTextStyles(); });
   bindSeg('ratioSeg', v=>{ state.ratio = v; updateCanvasSize(); });
-  bindSeg('pasteAutoFormatSeg', v=>{ state.pasteAutoFormat = (v === 'on'); });
+  bindSeg('pasteQuoteFormatSeg', v=>{
+    state.pasteQuoteFormat = (v === 'on');
+    updatePasteQuoteModeVisibility();
+  });
+  bindSeg('pasteQuoteModeSeg', v=>{ state.pasteQuoteFormatMode = v; });
+  bindSeg('pasteItalicFormatSeg', v=>{ state.pasteItalicFormat = (v === 'on'); });
+  function updatePasteQuoteModeVisibility(){
+    const row = $('#pasteQuoteModeRow');
+    const seg = $('#pasteQuoteModeSeg');
+    const show = state.pasteQuoteFormat;
+    if(row) row.style.display = show ? '' : 'none';
+    if(seg) seg.style.display = show ? '' : 'none';
+  }
   bindSeg('bgTypeSeg', v=>{
     state.bgType = v;
     $('#bgBWrap').style.display = (v==='gradient') ? 'block' : 'none';
@@ -1522,9 +1549,20 @@
   $('#btnToggleVline').addEventListener('click', ()=>{
     toggleInlineFormat('vl', span=>{ span.style.borderLeftColor = lastVlineColor; });
   });
-  function applyVlineColorToAll(color){
+  // Color swatches for the vertical accent line no longer repaint every
+  // vline on the canvas at once. If the current selection overlaps one or
+  // more already-applied vlines, only those get restyled - so each vline
+  // can end up a different color. With no selection, picking a color just
+  // sets the default used the next time the toggle button creates a new
+  // vline.
+  function applyVlineColor(color){
     lastVlineColor = color;
-    $$('span.vl', textBlock).forEach(span=>{ span.style.borderLeftColor = color; });
+    const range = getSelRange();
+    if(range && !range.collapsed){
+      $$('span.vl', textBlock).forEach(span=>{
+        if(range.intersectsNode(span)) span.style.borderLeftColor = color;
+      });
+    }
   }
   $$('#vlineColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
@@ -1533,12 +1571,12 @@
       sw.classList.add('active');
       $('#vlCustom').value = sw.dataset.vl;
       syncColorTrigger('vlCustom', sw.dataset.vl);
-      applyVlineColorToAll(sw.dataset.vl);
+      applyVlineColor(sw.dataset.vl);
     });
   });
   $('#vlCustom').addEventListener('input', e=>{
     $$('#vlineColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
-    applyVlineColorToAll(e.target.value);
+    applyVlineColor(e.target.value);
   });
 
   function applyUnderlineColorToAll(color){
@@ -1771,17 +1809,7 @@
     });
   }
 
-  function convertSelectionToBubble(){
-    normalizeTopLevelParagraphs();
-    const range = getSelRange();
-    if(!range || range.collapsed){
-      showToast('말풍선으로 만들 문장을 먼저 선택해주세요');
-      return;
-    }
-    const row = document.createElement('div');
-    row.className = 'bubble-row dir-left';
-    row.contentEditable = 'false';
-
+  function createStyledBubble(){
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     bubble.contentEditable = 'true';
@@ -1793,6 +1821,21 @@
     bubble.style.fontSize = lastBubbleSize + '%';
     bubble.dataset.size = lastBubbleSize;
     bubble.dataset.radius = lastBubbleRadius;
+    return bubble;
+  }
+
+  function convertSelectionToBubble(){
+    normalizeTopLevelParagraphs();
+    const range = getSelRange();
+    if(!range || range.collapsed){
+      showToast('말풍선으로 만들 문장을 먼저 선택해주세요');
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'bubble-row dir-left';
+    row.contentEditable = 'false';
+
+    const bubble = createStyledBubble();
 
     try{
       const frag = range.extractContents();
@@ -2183,21 +2226,24 @@
   window.addEventListener('resize', scheduleFit);
   window.addEventListener('orientationchange', scheduleFit);
 
-  /* ---------------- mobile bottom sheet (drag to resize / tap to toggle) ----------------
+  /* ---------------- mobile bottom sheet (drag to resize) ----------------
      Below 900px the settings panel is a draggable sheet (--sheet-h CSS var, read by
      the media-query rules above). Desktop keeps the original split-view layout and
-     never reads this variable, so none of this affects it. */
+     never reads this variable, so none of this affects it.
+
+     Tapping the handle used to snap the sheet up to near-fullscreen - removed
+     because it felt like an accidental full-screen takeover on mobile. Only
+     dragging the handle up/down to resize remains. */
   (function(){
     const panel = $('#panel');
     const handle = $('#sheetHandle');
     if(!panel || !handle) return;
 
-    const PEEK = 0.46, EXPANDED = 0.88, MIN = 0.24, MAX = 0.92;
+    const PEEK = 0.46, MIN = 0.24, MAX = 0.92;
     const vh = (v)=> window.innerHeight * v;
 
-    let expanded = false;
     let currentH = vh(PEEK);
-    let dragging = false, moved = false, startY = 0, startH = 0, suppressClick = false;
+    let dragging = false, startY = 0, startH = 0;
 
     function setHeight(px, animate){
       if(!animate) panel.classList.add('dragging');
@@ -2206,17 +2252,12 @@
         requestAnimationFrame(()=> requestAnimationFrame(()=> panel.classList.remove('dragging')));
       }
     }
-    function toggle(){
-      expanded = !expanded;
-      currentH = expanded ? vh(EXPANDED) : vh(PEEK);
-      setHeight(currentH, true);
-    }
 
     setHeight(currentH, true);
 
     handle.addEventListener('touchstart', (e)=>{
       if(e.touches.length !== 1) return;
-      dragging = true; moved = false;
+      dragging = true;
       panel.classList.add('dragging');
       startY = e.touches[0].clientY;
       startH = currentH;
@@ -2225,7 +2266,6 @@
     handle.addEventListener('touchmove', (e)=>{
       if(!dragging) return;
       const dy = startY - e.touches[0].clientY;
-      if(Math.abs(dy) > 6) moved = true;
       const h = Math.min(vh(MAX), Math.max(vh(MIN), startH + dy));
       document.documentElement.style.setProperty('--sheet-h', h + 'px');
     }, { passive:true });
@@ -2234,37 +2274,12 @@
       if(!dragging) return;
       dragging = false;
       panel.classList.remove('dragging');
-      if(moved){
-        const curPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-h')) || currentH;
-        expanded = Math.abs(curPx - vh(EXPANDED)) < Math.abs(curPx - vh(PEEK));
-        currentH = expanded ? vh(EXPANDED) : vh(PEEK);
-        setHeight(currentH, true);
-      } else {
-        toggle();
-      }
-      suppressClick = true;
-      setTimeout(()=>{ suppressClick = false; }, 400);
-    });
-
-    handle.addEventListener('click', ()=>{
-      if(suppressClick) return;
-      toggle();
-    });
-    handle.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
-    });
-
-    window.addEventListener('resize', ()=>{
-      currentH = expanded ? vh(EXPANDED) : vh(PEEK);
+      currentH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-h')) || currentH;
       setHeight(currentH, true);
     });
 
-    // Switching tabs on a still-peeking sheet should reveal the content, not
-    // leave the person scrolling a tiny sliver.
-    $$('.tab').forEach(t=>{
-      t.addEventListener('click', ()=>{
-        if(!expanded && window.innerWidth < 900){ toggle(); }
-      });
+    window.addEventListener('resize', ()=>{
+      setHeight(currentH, true);
     });
   })();
 
@@ -2285,21 +2300,25 @@
      text keeps the canvas centered and sized correctly no matter how
      much text comes in.
 
-     When "붙여넣기 자동 서식" is on, straight double quotes are converted
-     to curly ones and *word* pairs become italic (and the asterisks are
-     removed) — toggle it off in 문장 설정 to paste completely as-is. */
-  function smartQuotes(str){
-    return str
-      .replace(/(^|[\s([{"'\u2018\u201C])"/g, '$1\u201C')
-      .replace(/"/g, '\u201D');
-  }
-  function buildAutoFormattedLine(line){
+     Two independent auto-format toggles (문장 설정 패널):
+     - 따옴표 자동 서식: text wrapped in " " or “ ” gets 따옴표(qt span) or,
+       for a line that is nothing but one whole quoted sentence, 말풍선
+       formatting — whichever the 적용 방식 seg is set to. A quote that's
+       only part of a longer line always becomes an inline 따옴표 span,
+       since a mid-sentence chat bubble wouldn't make layout sense.
+     - 기울임 자동 서식: *word* pairs become italic (asterisks removed).
+     Each can be switched off independently to paste as-is. */
+  function buildItalicFragment(text){
     const frag = document.createDocumentFragment();
+    if(!state.pasteItalicFormat){
+      frag.appendChild(document.createTextNode(text));
+      return frag;
+    }
     const re = /\*([^*\n]+)\*/g;
     let lastIndex = 0, m, matched = false;
-    while((m = re.exec(line))){
+    while((m = re.exec(text))){
       matched = true;
-      if(m.index > lastIndex) frag.appendChild(document.createTextNode(line.slice(lastIndex, m.index)));
+      if(m.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
       const span = document.createElement('span');
       span.className = 'it';
       span.textContent = m[1];
@@ -2307,12 +2326,59 @@
       lastIndex = re.lastIndex;
     }
     if(!matched){
-      frag.appendChild(document.createTextNode(line));
-    } else if(lastIndex < line.length){
-      frag.appendChild(document.createTextNode(line.slice(lastIndex)));
+      frag.appendChild(document.createTextNode(text));
+    } else if(lastIndex < text.length){
+      frag.appendChild(document.createTextNode(text.slice(lastIndex)));
     }
     return frag;
   }
+
+  // A whole trimmed line that is exactly one "…" / "…" pair, with nothing
+  // outside it, can become a full chat bubble instead of an inline span.
+  const WHOLE_LINE_QUOTE_RE = /^(?:"([^"\n]*)"|\u201C([^\u201D\n]*)\u201D)$/;
+  const QUOTE_SEGMENT_RE = /"([^"\n]+)"|\u201C([^\u201D\n]+)\u201D/g;
+
+  function buildLineFragment(line){
+    const frag = document.createDocumentFragment();
+    if(!state.pasteQuoteFormat){
+      frag.appendChild(buildItalicFragment(line));
+      return frag;
+    }
+    QUOTE_SEGMENT_RE.lastIndex = 0;
+    let lastIndex = 0, m, matched = false;
+    while((m = QUOTE_SEGMENT_RE.exec(line))){
+      matched = true;
+      if(m.index > lastIndex) frag.appendChild(buildItalicFragment(line.slice(lastIndex, m.index)));
+      const inner = m[1] !== undefined ? m[1] : m[2];
+      const qt = document.createElement('span');
+      qt.className = 'qt';
+      qt.appendChild(buildItalicFragment(inner));
+      frag.appendChild(qt);
+      lastIndex = QUOTE_SEGMENT_RE.lastIndex;
+    }
+    if(!matched){
+      frag.appendChild(buildItalicFragment(line));
+    } else if(lastIndex < line.length){
+      frag.appendChild(buildItalicFragment(line.slice(lastIndex)));
+    }
+    return frag;
+  }
+
+  // Builds a bubble row the same way the manual "말풍선으로 만들기" button
+  // does (see createStyledBubble/makeBubbleHandle/applyBubbleCorner above),
+  // just from a plain string instead of a live selection Range.
+  function buildBubbleRowForPaste(text){
+    const row = document.createElement('div');
+    row.className = 'bubble-row dir-left';
+    row.contentEditable = 'false';
+    const bubble = createStyledBubble();
+    bubble.appendChild(buildItalicFragment(text));
+    row.appendChild(bubble);
+    makeBubbleHandle(row);
+    applyBubbleCorner(bubble);
+    return row;
+  }
+
   textBlock.addEventListener('paste', (e)=>{
     e.preventDefault();
     const clipboard = e.clipboardData || window.clipboardData;
@@ -2327,20 +2393,26 @@
     if(!textBlock.contains(range.commonAncestorContainer)) return;
     range.deleteContents();
 
+    const bubbleMode = state.pasteQuoteFormat && state.pasteQuoteFormatMode === 'bubble';
     const lines = text.split('\n');
     const frag = document.createDocumentFragment();
     let lastNode = null;
     lines.forEach(line=>{
-      const div = document.createElement('div');
-      if(state.pasteAutoFormat){
-        div.appendChild(buildAutoFormattedLine(smartQuotes(line)));
+      const wholeLineMatch = bubbleMode ? line.trim().match(WHOLE_LINE_QUOTE_RE) : null;
+      if(wholeLineMatch){
+        const inner = wholeLineMatch[1] !== undefined ? wholeLineMatch[1] : wholeLineMatch[2];
+        const row = buildBubbleRowForPaste(inner);
+        frag.appendChild(row);
+        lastNode = row;
       } else {
-        div.textContent = line;
+        const div = document.createElement('div');
+        div.appendChild(buildLineFragment(line));
+        frag.appendChild(div);
+        lastNode = div;
       }
-      frag.appendChild(div);
-      lastNode = div;
     });
     range.insertNode(frag);
+    normalizeTopLevelParagraphs();
 
     if(lastNode){
       const newRange = document.createRange();
@@ -2527,7 +2599,10 @@
     syncSwatch('[data-bg]', 'bg', state.bgA, '#bgACustom');
     syncSwatch('[data-bg2]', 'bg2', state.bgB, '#bgBCustom');
 
-    setSegActive('pasteAutoFormatSeg', state.pasteAutoFormat ? 'on' : 'off');
+    setSegActive('pasteQuoteFormatSeg', state.pasteQuoteFormat ? 'on' : 'off');
+    setSegActive('pasteQuoteModeSeg', state.pasteQuoteFormatMode);
+    setSegActive('pasteItalicFormatSeg', state.pasteItalicFormat ? 'on' : 'off');
+    updatePasteQuoteModeVisibility();
     setSegActive('quoteItalicSeg', state.quoteItalic ? 'on' : 'off');
     setSegActive('quoteMarksSeg', state.quoteMarks ? 'on' : 'off');
     syncSwatch('#quoteColorSwatches .swatch', 'qc', state.quoteColor, '#qcCustom');
