@@ -151,11 +151,14 @@
     }
   }
 
-  /* fixed-size viewing window: the canvas scales up/down to fit inside this,
-     it never needs to be scrolled */
+  /* scrollable viewing window: the canvas is shown at a fixed width-fit
+     scale (never shrunk further just because there's a lot of text) and,
+     when it's taller than the window, the window scrolls vertically so
+     the person can scroll down to see the rest instead of everything
+     shrinking to stay fully visible. */
   .preview-frame{
     position:relative;
-    height:44vh; min-height:260px; max-height:440px;
+    height:56vh; min-height:320px; max-height:640px;
     border-radius:14px;
     background:
       linear-gradient(45deg, #EAEAEA 25%, transparent 25%) -8px 0/16px 16px,
@@ -163,33 +166,23 @@
       linear-gradient(45deg, transparent 75%, #EAEAEA 75%) 0 0/16px 16px,
       linear-gradient(-45deg, transparent 75%, #EAEAEA 75%) 0 0/16px 16px,
       #F3F3F3;
-    display:flex; align-items:center; justify-content:center;
-    overflow:hidden;
+    overflow-y:auto; overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding:18px 0;
   }
   @media (min-width:900px){ .preview-frame{ flex:1; height:auto; max-height:none; } }
 
+  /* Reserves exactly the (scaled) footprint of the canvas so the frame's
+     native scrollbar/scroll gesture covers the right distance. */
+  .preview-sizer{
+    position:relative;
+    margin:0 auto;
+  }
   .preview-scale{
-    display:flex; align-items:center; justify-content:center;
-    transition:transform .12s ease;
-    will-change:transform;
+    position:absolute; top:0; left:0;
+    transform-origin:top left;
   }
-  .preview-zoom{
-    display:flex; align-items:center; justify-content:center;
-    transform-origin:center center;
-    /* touch-action is toggled dynamically in JS (none only while an actual
-       pinch/pan gesture is happening) instead of being fixed to "none"
-       here — a permanently-none ancestor blocks iOS's native text
-       selection handles/magnifier even on touches that never trigger our
-       own pan/zoom logic. */
-    touch-action:auto;
-  }
-  .zoom-reset-btn{
-    position:absolute; top:10px; right:10px; z-index:30;
-    border:1px solid var(--border); background:rgba(255,255,255,0.92);
-    color:var(--ink); padding:6px 13px; border-radius:999px;
-    font-size:11.5px; font-weight:600; cursor:pointer;
-  }
-  .zoom-reset-btn:active{ transform:scale(0.95); }
   .canvas{
     position:relative;
     display:flex; flex-direction:column; justify-content:center;
@@ -224,6 +217,11 @@
   .text-block span.it{ font-style:italic; }
   .text-block span.st{ text-decoration:line-through; }
   .text-block span.ul{ text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; }
+  .text-block span.vl{
+    border-left:3px solid #2F6FED;
+    padding-left:0.5em; margin-left:0.05em;
+    box-decoration-break:clone; -webkit-box-decoration-break:clone;
+  }
   .text-block span.qt{ font-style:var(--quote-style, italic); color:var(--quote-color, var(--muted)); }
   .text-block span.qt::before{ content:'“'; font-style:normal; }
   .text-block span.qt::after{ content:'”'; font-style:normal; }
@@ -369,10 +367,11 @@
   }
   .seg button.active{ background:var(--accent); color:#fff; }
 
-  .format-btn-row{ display:flex; gap:8px; }
+  .format-btn-row{ display:flex; flex-wrap:wrap; gap:8px; }
   .format-btn{
-    flex:1; border:1px solid var(--border); background:var(--panel); color:var(--ink);
-    padding:10px 0; border-radius:8px; font-size:15px; cursor:pointer;
+    flex:0 0 auto; width:44px; height:44px; display:inline-flex; align-items:center; justify-content:center;
+    border:1px solid var(--border); background:var(--panel); color:var(--ink);
+    padding:0; border-radius:10px; font-size:15px; cursor:pointer;
     transition:transform .12s ease, background .12s ease, color .12s ease;
   }
   .format-btn:active{ transform:scale(0.95); }
@@ -382,7 +381,8 @@
   .format-btn .fmt-s{ text-decoration:line-through; font-weight:700; }
   .format-btn .fmt-u{ text-decoration:underline; text-underline-offset:2px; font-weight:700; }
   .format-btn .fmt-q{ font-weight:800; font-family:Georgia, 'Times New Roman', serif; }
-  .format-btn.label{ font-size:12.5px; font-weight:700; padding:10px 4px; }
+  .format-btn .fmt-vl{ display:inline-block; width:3px; height:14px; background:currentColor; border-radius:1px; vertical-align:-2px; }
+  .format-btn.label{ width:auto; flex:1 1 0; min-width:64px; height:44px; padding:0 4px; font-size:12.5px; font-weight:700; }
 
   .accordion-head{
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -492,8 +492,8 @@
 
     <div class="preview-pane">
       <div class="preview-frame" id="previewFrame">
-        <div class="preview-scale" id="previewScale">
-          <div class="preview-zoom" id="previewZoom">
+        <div class="preview-sizer" id="previewSizer">
+          <div class="preview-scale" id="previewScale">
             <div id="canvas" class="canvas ratio-auto">
               <div id="bgImageLayer" class="bg-image-layer"></div>
               <div id="bgDarkOverlay" class="bg-dark-overlay"></div>
@@ -502,12 +502,11 @@
             </div>
           </div>
         </div>
-        <button type="button" class="zoom-reset-btn" id="zoomResetBtn" style="display:none;">축소</button>
       </div>
       <div class="canvas-meta">
         <span id="dimLabel">- × - px</span>
         <span class="dot"></span>
-        <span>탭하여 바로 편집</span>
+        <span>탭하여 바로 편집 · 아래로 스크롤하면 이어서 볼 수 있어요</span>
       </div>
     </div>
 
@@ -548,6 +547,24 @@
         <!-- ===== TEXT TAB ===== -->
         <section class="panel-section active" data-panel="text">
 
+          <p class="section-title">빠른 서식 · 선택한 문장에 적용</p>
+          <div class="field">
+            <div class="format-btn-row">
+              <button class="format-btn" id="btnToggleBold" aria-label="굵게 적용·해제"><span class="fmt-b">B</span></button>
+              <button class="format-btn" id="btnToggleItalic" aria-label="기울임 적용·해제"><span class="fmt-i">I</span></button>
+              <button class="format-btn" id="btnToggleStrike" aria-label="취소선 적용·해제"><span class="fmt-s">S</span></button>
+              <button class="format-btn" id="btnToggleUnderline" aria-label="강조선 적용·해제"><span class="fmt-u">U</span></button>
+              <button class="format-btn" id="btnToggleVline" aria-label="세로 강조선 적용·해제"><span class="fmt-vl"></span></button>
+              <button class="format-btn" id="btnToggleQuote" aria-label="인용구 적용·해제"><span class="fmt-q">"</span></button>
+              <button class="format-btn label" id="btnSizeTitle">제목</button>
+              <button class="format-btn label" id="btnSizeSubtitle">부제목</button>
+              <button class="format-btn label" id="btnSizeBody">본문</button>
+            </div>
+            <p class="field-hint">문장을 드래그로 선택한 뒤 눌러 적용하고, 다시 누르면 해제돼요. 제목·부제목·본문은 글자 크기를 바꿔요.</p>
+          </div>
+
+          <div class="divider"></div>
+
           <p class="section-title">서체 &amp; 굵기</p>
           <div class="field">
             <select class="select" id="fontSelect">
@@ -565,25 +582,12 @@
             </div>
           </div>
           <div class="field">
-            <div class="field-row"><span class="field-label">부분 서식</span></div>
-            <div class="format-btn-row">
-              <button class="format-btn" id="btnToggleBold" aria-label="굵게 적용·해제"><span class="fmt-b">B</span></button>
-              <button class="format-btn" id="btnToggleItalic" aria-label="기울임 적용·해제"><span class="fmt-i">I</span></button>
-              <button class="format-btn" id="btnToggleStrike" aria-label="취소선 적용·해제"><span class="fmt-s">S</span></button>
-              <button class="format-btn" id="btnToggleUnderline" aria-label="강조선 적용·해제"><span class="fmt-u">U</span></button>
-              <button class="format-btn" id="btnToggleQuote" aria-label="인용구 적용·해제"><span class="fmt-q">"</span></button>
+            <div class="field-row"><span class="field-label">붙여넣기 자동 서식</span></div>
+            <div class="seg" id="pasteAutoFormatSeg">
+              <button data-value="on" class="active">켜짐</button>
+              <button data-value="off">꺼짐</button>
             </div>
-            <p class="field-hint">문장을 드래그로 선택한 뒤 눌러 적용하고, 다시 누르면 해제돼요.</p>
-          </div>
-
-          <div class="field">
-            <div class="field-row"><span class="field-label">글자 크기 유형</span></div>
-            <div class="format-btn-row">
-              <button class="format-btn label" id="btnSizeTitle">제목</button>
-              <button class="format-btn label" id="btnSizeSubtitle">부제목</button>
-              <button class="format-btn label" id="btnSizeBody">본문</button>
-            </div>
-            <p class="field-hint">문장을 드래그로 선택한 뒤 눌러 제목·부제목 크기를 적용해요. 본문을 누르면 원래 크기로 되돌아가요.</p>
+            <p class="field-hint">켜두면 붙여넣을 때 " "가 “ ”로, *기울임*이 자동으로 기울임체로 바뀌어요.</p>
           </div>
 
           <div class="divider"></div>
@@ -701,6 +705,19 @@
                   <input type="hidden" id="ucCustom" value="#e5342b"><button type="button" class="cp-trigger" data-for="ucCustom" aria-label="강조선 색 직접 선택"></button>
                 </div>
                 <p class="field-hint">색을 바꾸면 이미 적용된 강조선까지 한 번에 바뀌어요.</p>
+              </div>
+
+              <p class="section-title">세로 강조선 색</p>
+              <div class="field">
+                <div class="field-row"><span class="field-label">문장 앞 세로선에 적용할 색을 선택하세요</span></div>
+                <div class="swatches" id="vlineColorSwatches">
+                  <span class="swatch active" data-vl="#2F6FED" style="background:#2F6FED"></span>
+                  <span class="swatch" data-vl="#E5342B" style="background:#E5342B"></span>
+                  <span class="swatch" data-vl="#111111" style="background:#111111"></span>
+                  <span class="swatch" data-vl="#FFE066" style="background:#FFE066"></span>
+                  <input type="hidden" id="vlCustom" value="#2f6fed"><button type="button" class="cp-trigger" data-for="vlCustom" aria-label="세로 강조선 색 직접 선택"></button>
+                </div>
+                <p class="field-hint">색을 바꾸면 이미 적용된 세로 강조선까지 한 번에 바뀌어요.</p>
               </div>
 
             </div>
@@ -957,9 +974,8 @@
   const dimLabel = $('#dimLabel');
   const toast = $('#toast');
   const previewFrame = $('#previewFrame');
+  const previewSizer = $('#previewSizer');
   const previewScale = $('#previewScale');
-  const previewZoom = $('#previewZoom');
-  const zoomResetBtn = $('#zoomResetBtn');
 
   const state = {
     font: "'Pretendard', sans-serif",
@@ -988,7 +1004,8 @@
     subtitleSize: 32,
     quoteItalic: true,
     quoteColor: '#8C8C8C',
-    quoteMarks: true
+    quoteMarks: true,
+    pasteAutoFormat: true
   };
 
   function showToast(msg){
@@ -1023,6 +1040,7 @@
   bindSeg('weightSeg', v=>{ state.weight = +v; applyTextStyles(); });
   bindSeg('alignSeg', v=>{ state.align = v; applyTextStyles(); });
   bindSeg('ratioSeg', v=>{ state.ratio = v; updateCanvasSize(); });
+  bindSeg('pasteAutoFormatSeg', v=>{ state.pasteAutoFormat = (v === 'on'); });
   bindSeg('bgTypeSeg', v=>{
     state.bgType = v;
     $('#bgBWrap').style.display = (v==='gradient') ? 'block' : 'none';
@@ -1499,6 +1517,29 @@
     toggleInlineFormat('ul', span=>{ span.style.textDecorationColor = lastUnderlineColor; });
   });
   $('#btnToggleQuote').addEventListener('click', ()=> toggleInlineFormat('qt'));
+
+  let lastVlineColor = '#2F6FED';
+  $('#btnToggleVline').addEventListener('click', ()=>{
+    toggleInlineFormat('vl', span=>{ span.style.borderLeftColor = lastVlineColor; });
+  });
+  function applyVlineColorToAll(color){
+    lastVlineColor = color;
+    $$('span.vl', textBlock).forEach(span=>{ span.style.borderLeftColor = color; });
+  }
+  $$('#vlineColorSwatches .swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
+      $$('#vlineColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      $('#vlCustom').value = sw.dataset.vl;
+      syncColorTrigger('vlCustom', sw.dataset.vl);
+      applyVlineColorToAll(sw.dataset.vl);
+    });
+  });
+  $('#vlCustom').addEventListener('input', e=>{
+    $$('#vlineColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+    applyVlineColorToAll(e.target.value);
+  });
 
   function applyUnderlineColorToAll(color){
     lastUnderlineColor = color;
@@ -2105,19 +2146,30 @@
   }
 
   function updateFit(){
+    // canvas.offsetWidth/Height always reflect its true, unscaled size —
+    // CSS transform (unlike zoom) never changes an element's own layout
+    // box, so this stays accurate no matter what scale was applied last.
     const cw = canvas.offsetWidth;
     const ch = canvas.offsetHeight;
     if(!cw || !ch) return;
 
     dimLabel.textContent = Math.round(cw) + ' × ' + Math.round(ch) + ' px';
 
+    // Fit to the frame's WIDTH only (not height) — text length no longer
+    // shrinks the preview; instead the frame scrolls vertically when the
+    // scaled canvas is taller than it is.
     const pad = 24;
     const fw = Math.max(1, previewFrame.clientWidth - pad*2);
-    const fh = Math.max(1, previewFrame.clientHeight - pad*2);
-    let scale = Math.min(fw / cw, fh / ch);
+    let scale = fw / cw;
     scale = Math.min(scale, 2);
-    scale = Math.max(scale, 0.03);
+    scale = Math.max(scale, 0.05);
+
+    previewScale.style.width = cw + 'px';
+    previewScale.style.height = ch + 'px';
     previewScale.style.transform = `scale(${scale})`;
+
+    previewSizer.style.width = Math.round(cw * scale) + 'px';
+    previewSizer.style.height = Math.round(ch * scale) + 'px';
   }
 
   let fitResizeTimer = null;
@@ -2130,129 +2182,6 @@
   }
   window.addEventListener('resize', scheduleFit);
   window.addEventListener('orientationchange', scheduleFit);
-
-  /* ---------------- pinch-to-zoom (mobile preview) ----------------
-     Independent of the auto-fit scale above: two-finger pinch lets the
-     person zoom into the preview to check detail.
-
-     Single-finger panning is only ever started when the touch begins
-     OUTSIDE the editable text (on the surrounding canvas/background) —
-     that's the one case where "drag with one finger to move the zoomed
-     view" and "the browser's own touch handling" can never collide.
-     If a touch starts ON the text, this code stays out of it completely
-     (no preventDefault, no pan) so tap-to-place-caret, long-press to
-     select a word, dragging out a selection range, and then dragging the
-     native selection handles afterwards all behave exactly like normal
-     mobile text editing — none of it gets pulled into panning the view. */
-  let zoomScale = 1, zoomX = 0, zoomY = 0;
-  let pinchStartDist = 0, pinchStartScale = 1, pinchStartMid = {x:0,y:0}, pinchStartZ = {x:0,y:0};
-  let isPanning = false, panPending = false, panStartTouch = {x:0,y:0}, panStartZ = {x:0,y:0};
-  // Once a touch sequence begins ON the text, this stays true for the whole
-  // sequence (until every finger lifts) — checked instead of re-testing the
-  // touchmove target, because once a native selection handle/magnifier
-  // appears, subsequent touchmove events target that OS-drawn overlay (not
-  // any node inside #textBlock), which previously made isOnText() wrongly
-  // report "not on text" mid-drag and let panning logic hijack the gesture.
-  let textTouchActive = false;
-  const PAN_MOVE_TOL = 8;
-
-  function touchDist(a, b){
-    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-  }
-  function touchMid(a, b){
-    return { x:(a.clientX + b.clientX) / 2, y:(a.clientY + b.clientY) / 2 };
-  }
-  function applyZoomTransform(){
-    previewZoom.style.transform = `translate(${zoomX}px, ${zoomY}px) scale(${zoomScale})`;
-    zoomResetBtn.style.display = zoomScale > 1.02 ? 'block' : 'none';
-  }
-  function isOnText(target){
-    return !!(target && target.nodeType && (target.nodeType === 1 ? target.closest('#textBlock') : target.parentElement && target.parentElement.closest('#textBlock')));
-  }
-  // touch-action is only forced to "none" for the duration of a real
-  // pinch/pan gesture. Leaving it at "auto" the rest of the time (in
-  // particular for the whole lifetime of any touch that starts on the
-  // text) is required for iOS to draw and let the person drag its native
-  // text-selection handles/magnifier — a permanently-"none" ancestor
-  // suppresses that system UI entirely, even on touches our own JS never
-  // calls preventDefault() on.
-  function setZoomTouchAction(v){ previewZoom.style.touchAction = v; }
-
-  previewFrame.addEventListener('touchstart', (e)=>{
-    if(e.touches.length === 2){
-      isPanning = false; panPending = false; textTouchActive = false;
-      setZoomTouchAction('none');
-      e.preventDefault();
-      pinchStartDist = touchDist(e.touches[0], e.touches[1]);
-      pinchStartScale = zoomScale;
-      pinchStartMid = touchMid(e.touches[0], e.touches[1]);
-      pinchStartZ = { x:zoomX, y:zoomY };
-    } else if(e.touches.length === 1 && zoomScale > 1.02 && !isOnText(e.target)){
-      // Started outside the text — a plain tap here does nothing anyway,
-      // so it's safe to treat a subsequent drag as panning.
-      isPanning = false;
-      panPending = true;
-      textTouchActive = false;
-      setZoomTouchAction('none');
-      panStartTouch = { x:e.touches[0].clientX, y:e.touches[0].clientY };
-      panStartZ = { x:zoomX, y:zoomY };
-    } else {
-      // Touch started on the text itself (or no zoom is active): leave it
-      // entirely to the browser — this includes long-press to select,
-      // dragging out a selection range, and dragging the native selection
-      // handles that appear afterwards.
-      isPanning = false; panPending = false;
-      textTouchActive = isOnText(e.target);
-      setZoomTouchAction('auto');
-    }
-  }, { passive:false });
-
-  previewFrame.addEventListener('touchmove', (e)=>{
-    if(textTouchActive) return; // never hijack a gesture that began on text
-    if(e.touches.length === 2){
-      isPanning = false; panPending = false;
-      e.preventDefault();
-      const dist = touchDist(e.touches[0], e.touches[1]);
-      const ratio = dist / (pinchStartDist || dist);
-      zoomScale = Math.min(4, Math.max(1, pinchStartScale * ratio));
-      const mid = touchMid(e.touches[0], e.touches[1]);
-      zoomX = pinchStartZ.x + (mid.x - pinchStartMid.x);
-      zoomY = pinchStartZ.y + (mid.y - pinchStartMid.y);
-      applyZoomTransform();
-    } else if(e.touches.length === 1 && (isPanning || panPending)){
-      const dx = e.touches[0].clientX - panStartTouch.x;
-      const dy = e.touches[0].clientY - panStartTouch.y;
-      if(!isPanning){
-        if(Math.hypot(dx, dy) < PAN_MOVE_TOL) return; // hasn't moved enough yet
-        isPanning = true;
-        panPending = false;
-      }
-      e.preventDefault();
-      zoomX = panStartZ.x + dx;
-      zoomY = panStartZ.y + dy;
-      applyZoomTransform();
-    }
-  }, { passive:false });
-
-  function endTouchInteraction(e){
-    if(e.touches.length < 1){
-      isPanning = false; panPending = false; textTouchActive = false;
-      setZoomTouchAction('auto');
-    }
-    if(e.touches.length < 2 && zoomScale <= 1.02){
-      zoomScale = 1; zoomX = 0; zoomY = 0;
-      isPanning = false; panPending = false;
-      applyZoomTransform();
-    }
-  }
-  previewFrame.addEventListener('touchend', endTouchInteraction);
-  previewFrame.addEventListener('touchcancel', endTouchInteraction);
-
-  zoomResetBtn.addEventListener('click', ()=>{
-    zoomScale = 1; zoomX = 0; zoomY = 0;
-    isPanning = false;
-    applyZoomTransform();
-  });
 
   /* ---------------- mobile bottom sheet (drag to resize / tap to toggle) ----------------
      Below 900px the settings panel is a draggable sheet (--sheet-h CSS var, read by
@@ -2354,7 +2283,36 @@
      styles like negative margins or absolute positioning that visually
      escape the layout, especially with large pastes. Stripping to plain
      text keeps the canvas centered and sized correctly no matter how
-     much text comes in. */
+     much text comes in.
+
+     When "붙여넣기 자동 서식" is on, straight double quotes are converted
+     to curly ones and *word* pairs become italic (and the asterisks are
+     removed) — toggle it off in 문장 설정 to paste completely as-is. */
+  function smartQuotes(str){
+    return str
+      .replace(/(^|[\s([{"'\u2018\u201C])"/g, '$1\u201C')
+      .replace(/"/g, '\u201D');
+  }
+  function buildAutoFormattedLine(line){
+    const frag = document.createDocumentFragment();
+    const re = /\*([^*\n]+)\*/g;
+    let lastIndex = 0, m, matched = false;
+    while((m = re.exec(line))){
+      matched = true;
+      if(m.index > lastIndex) frag.appendChild(document.createTextNode(line.slice(lastIndex, m.index)));
+      const span = document.createElement('span');
+      span.className = 'it';
+      span.textContent = m[1];
+      frag.appendChild(span);
+      lastIndex = re.lastIndex;
+    }
+    if(!matched){
+      frag.appendChild(document.createTextNode(line));
+    } else if(lastIndex < line.length){
+      frag.appendChild(document.createTextNode(line.slice(lastIndex)));
+    }
+    return frag;
+  }
   textBlock.addEventListener('paste', (e)=>{
     e.preventDefault();
     const clipboard = e.clipboardData || window.clipboardData;
@@ -2374,7 +2332,11 @@
     let lastNode = null;
     lines.forEach(line=>{
       const div = document.createElement('div');
-      div.textContent = line;
+      if(state.pasteAutoFormat){
+        div.appendChild(buildAutoFormattedLine(smartQuotes(line)));
+      } else {
+        div.textContent = line;
+      }
       frag.appendChild(div);
       lastNode = div;
     });
@@ -2473,10 +2435,6 @@
     const prevTransition = previewScale.style.transition;
     previewScale.style.transition = 'none';
     previewScale.style.transform = 'none';
-    // The pinch-zoom layer must also be neutralized during capture, or a
-    // zoomed-in preview would export cropped/offset instead of the full canvas.
-    const prevZoomTransform = previewZoom.style.transform;
-    previewZoom.style.transform = 'none';
     void previewScale.offsetHeight; // force layout flush before measuring
 
     let hlState = null;
@@ -2492,7 +2450,6 @@
       teardownExportHighlightLayer(hlState);
       hlState = null;
       previewScale.style.transform = prevTransform;
-      previewZoom.style.transform = prevZoomTransform;
       void previewScale.offsetHeight;
       previewScale.style.transition = prevTransition;
 
@@ -2524,7 +2481,6 @@
     }catch(err){
       if(hlState) teardownExportHighlightLayer(hlState);
       previewScale.style.transform = prevTransform;
-      previewZoom.style.transform = prevZoomTransform;
       void previewScale.offsetHeight;
       previewScale.style.transition = prevTransition;
       showToast('이미지 생성 중 문제가 발생했어요');
@@ -2571,6 +2527,7 @@
     syncSwatch('[data-bg]', 'bg', state.bgA, '#bgACustom');
     syncSwatch('[data-bg2]', 'bg2', state.bgB, '#bgBCustom');
 
+    setSegActive('pasteAutoFormatSeg', state.pasteAutoFormat ? 'on' : 'off');
     setSegActive('quoteItalicSeg', state.quoteItalic ? 'on' : 'off');
     setSegActive('quoteMarksSeg', state.quoteMarks ? 'on' : 'off');
     syncSwatch('#quoteColorSwatches .swatch', 'qc', state.quoteColor, '#qcCustom');
@@ -2724,6 +2681,7 @@
       { key:'hl',         sel:'#hlColorSwatches',         attr:'hl',         stateKey:null },
       { key:'tc',         sel:'#tcColorSwatches',         attr:'tc',         stateKey:null },
       { key:'uc',         sel:'#underlineColorSwatches',  attr:'uc',         stateKey:'lastUnderlineColor' },
+      { key:'vl',         sel:'#vlineColorSwatches',      attr:'vl',         stateKey:'lastVlineColor' },
       { key:'qc',         sel:'#quoteColorSwatches',      attr:'qc',         stateKey:'quoteColor' },
       { key:'bubble',     sel:'#bubbleColorSwatches',     attr:'bubble',     stateKey:'lastBubbleColor' },
       { key:'bubbletext', sel:'#bubbleTextColorSwatches', attr:'bubbletext', stateKey:'lastBubbleTextColor' },
@@ -2834,6 +2792,8 @@
           state[group.stateKey] = newColor;
         } else if(group.stateKey === 'lastUnderlineColor'){
           lastUnderlineColor = newColor;
+        } else if(group.stateKey === 'lastVlineColor'){
+          lastVlineColor = newColor;
         } else if(group.stateKey === 'lastBubbleColor'){
           lastBubbleColor = newColor;
         } else if(group.stateKey === 'lastBubbleTextColor'){
