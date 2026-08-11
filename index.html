@@ -291,6 +291,14 @@
     cursor:pointer;
     overflow:hidden;
     line-height:0;
+    /* Chromium/WebKit sometimes leave the border-radius clip and the
+       cropped background-image a frame stale after aspect-ratio or
+       background-size change on their own — the fix is unrelated CSS
+       (a click, typing) forcing a repaint. Giving the box its own
+       composited layer keeps it painting immediately on every change. */
+    transform:translateZ(0);
+    -webkit-transform:translateZ(0);
+    backface-visibility:hidden;
   }
   .image-box img.image-natural{
     display:block; width:100%; height:auto;
@@ -2510,6 +2518,11 @@
 
     const radius = box.dataset.radius != null ? box.dataset.radius : lastImageRadius;
     box.style.borderRadius = radius + 'px';
+
+    // Belt-and-suspenders for the stale-paint issue above: force a
+    // synchronous layout/paint flush right after the style writes instead
+    // of leaving it to whatever interaction happens to trigger one next.
+    void box.offsetHeight;
   }
 
   // Recomputes the cropped image's background-size from its natural pixel
