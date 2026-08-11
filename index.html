@@ -1023,6 +1023,32 @@
     pasteItalicFormat: true
   };
 
+  /* ---------------- paste auto-format settings persistence ----------------
+     Only these three toggles are remembered across visits (separate from
+     the full-appearance preset slots below) - loaded once at startup and
+     saved to localStorage every time one of them changes. */
+  const PASTE_FORMAT_KEY = 'oreo_paste_format_v1';
+  (function loadPasteFormatSettings(){
+    try{
+      const raw = localStorage.getItem(PASTE_FORMAT_KEY);
+      const saved = raw ? JSON.parse(raw) : null;
+      if(saved && typeof saved === 'object'){
+        if(typeof saved.pasteQuoteFormat === 'boolean') state.pasteQuoteFormat = saved.pasteQuoteFormat;
+        if(saved.pasteQuoteFormatMode === 'quote' || saved.pasteQuoteFormatMode === 'bubble') state.pasteQuoteFormatMode = saved.pasteQuoteFormatMode;
+        if(typeof saved.pasteItalicFormat === 'boolean') state.pasteItalicFormat = saved.pasteItalicFormat;
+      }
+    }catch(e){ /* ignore corrupt/unavailable storage */ }
+  })();
+  function persistPasteFormatSettings(){
+    try{
+      localStorage.setItem(PASTE_FORMAT_KEY, JSON.stringify({
+        pasteQuoteFormat: state.pasteQuoteFormat,
+        pasteQuoteFormatMode: state.pasteQuoteFormatMode,
+        pasteItalicFormat: state.pasteItalicFormat
+      }));
+    }catch(e){ showToast('브라우저에 저장할 수 없어요'); }
+  }
+
   function showToast(msg){
     toast.textContent = msg;
     toast.classList.add('show');
@@ -1058,9 +1084,10 @@
   bindSeg('pasteQuoteFormatSeg', v=>{
     state.pasteQuoteFormat = (v === 'on');
     updatePasteQuoteModeVisibility();
+    persistPasteFormatSettings();
   });
-  bindSeg('pasteQuoteModeSeg', v=>{ state.pasteQuoteFormatMode = v; });
-  bindSeg('pasteItalicFormatSeg', v=>{ state.pasteItalicFormat = (v === 'on'); });
+  bindSeg('pasteQuoteModeSeg', v=>{ state.pasteQuoteFormatMode = v; persistPasteFormatSettings(); });
+  bindSeg('pasteItalicFormatSeg', v=>{ state.pasteItalicFormat = (v === 'on'); persistPasteFormatSettings(); });
   function updatePasteQuoteModeVisibility(){
     const row = $('#pasteQuoteModeRow');
     const seg = $('#pasteQuoteModeSeg');
