@@ -222,6 +222,18 @@
     padding-left:0.5em; margin-left:0.05em;
     box-decoration-break:clone; -webkit-box-decoration-break:clone;
   }
+  /* A vertical accent line applied across more than one paragraph can't be
+     one <span> (spans can't contain block-level paragraphs without the
+     browser silently splitting them, which is what caused the border to
+     break into disconnected pieces). Instead the selected paragraphs are
+     moved into this wrapper div, which carries the border itself so it
+     runs continuously through the paragraph gaps. */
+  .text-block div.vl-group{
+    border-left:3px solid #2F6FED;
+    padding-left:0.5em; margin-left:0.05em;
+  }
+  .text-block div.vl-group > div{ margin:0 0 var(--para-gap,16px) 0; }
+  .text-block div.vl-group > div:last-child{ margin-bottom:0; }
   .text-block span.qt{ font-style:var(--quote-style, italic); color:var(--quote-color, var(--muted)); }
   .text-block span.qt::before{ content:'“'; font-style:normal; }
   .text-block span.qt::after{ content:'”'; font-style:normal; }
@@ -935,7 +947,11 @@
             </div>
 
             <div id="paraImagePosWrap" style="display:none;">
-              <div class="field-row" style="margin-top:10px;"><span class="field-label">가로 위치</span><span class="field-value" id="paraImagePosXVal">50%</span></div>
+              <div class="field-row" style="margin-top:10px;"><span class="field-label">확대·축소</span><span class="field-value" id="paraImageZoomVal">100%</span></div>
+              <input type="range" id="paraImageZoomRange" min="100" max="300" step="1" value="100">
+              <p class="field-hint">잘린 틀 안에서 사진을 확대해 보여줄 부분을 조절해요.</p>
+
+              <div class="field-row" style="margin-top:14px;"><span class="field-label">가로 위치</span><span class="field-value" id="paraImagePosXVal">50%</span></div>
               <input type="range" id="paraImagePosXRange" min="0" max="100" step="1" value="50">
               <div class="field-row" style="margin-top:14px;"><span class="field-label">세로 위치</span><span class="field-value" id="paraImagePosYVal">50%</span></div>
               <input type="range" id="paraImagePosYRange" min="0" max="100" step="1" value="50">
@@ -1695,8 +1711,120 @@
   $('#btnToggleQuote').addEventListener('click', ()=> toggleInlineFormat('qt'));
 
   let lastVlineColor = '#2F6FED';
+  const VL_SELECTOR = 'span.vl, div.vl-group';
+
+  function vlUnwrap(node){
+    const parent = node.parentNode;
+    while(node.firstChild) parent.insertBefore(node.firstChild, node);
+    parent.removeChild(node);
+  }
+
+  // Finds the ancestor of `node` that is a direct child of #textBlock (i.e.
+  // its top-level paragraph/row). Returns null if node isn't inside textBlock.
+  function topLevelParagraphOf(node){
+    let n = node;
+    while(n && n.parentNode !== textBlock) n = n.parentNode;
+    return n;
+  }
+
+  // Splits `paraEl` (a top-level paragraph) at the given boundary into two
+  // fresh elements — everything before the boundary, and everything from
+  // the boundary onward — and replaces paraEl with whichever of the two
+  // actually has content (an empty side is simply dropped rather than left
+  // behind as a stray blank line). Returns {pre, post}, either of which may
+  // be null.
+  function splitParagraphAtBoundary(paraEl, boundaryContainer, boundaryOffset){
+    const preRange = document.createRange();
+    preRange.selectNodeContents(paraEl);
+    preRange.setEnd(boundaryContainer, boundaryOffset);
+    const preFrag = preRange.cloneContents();
+
+    const postRange = document.createRange();
+    postRange.selectNodeContents(paraEl);
+    postRange.setStart(boundaryContainer, boundaryOffset);
+    const postFrag = postRange.cloneContents();
+
+    const fragEmpty = (frag)=> frag.textContent.trim().length === 0 && !frag.querySelector('img');
+
+    let pre = null, post = null;
+    if(!fragEmpty(preFrag)){ pre = paraEl.cloneNode(false); pre.appendChild(preFrag); }
+    if(!fragEmpty(postFrag)){ post = paraEl.cloneNode(false); post.appendChild(postFrag); }
+
+    const parent = paraEl.parentNode;
+    const nextSibling = paraEl.nextSibling;
+    parent.removeChild(paraEl);
+
+    if(!pre && !post) pre = paraEl.cloneNode(false); // paragraph was empty either way — keep the line
+
+    if(pre) parent.insertBefore(pre, nextSibling);
+    if(post) parent.insertBefore(post, nextSibling);
+
+    return { pre, post };
+  }
+
+  function removeVlineFormat(range){
+    $$(VL_SELECTOR, textBlock).forEach(node=>{
+      if(range.intersectsNode(node)) vlUnwrap(node);
+    });
+  }
+
+  function applyVlineFormat(range, color){
+    const startTop = topLevelParagraphOf(range.startContainer);
+    const endTop = topLevelParagraphOf(range.endContainer);
+
+    if(!startTop || !endTop || startTop === endTop){
+      // Selection lives inside a single paragraph — a plain inline span
+      // already renders as one continuous border via box-decoration-break.
+      const span = document.createElement('span');
+      span.className = 'vl';
+      span.style.borderLeftColor = color;
+      try{
+        const frag = range.extractContents();
+        span.appendChild(frag);
+        range.insertNode(span);
+      }catch(e){ /* ignore */ }
+      return;
+    }
+
+    // Selection spans multiple paragraphs: trim the first/last paragraph
+    // down to just the selected portion, then wrap every paragraph in
+    // between (inclusive) in one block-level container so the accent line
+    // runs continuously through the paragraph gaps instead of restarting
+    // — and disappearing — at every paragraph boundary.
+    const { pre: lastMember } = splitParagraphAtBoundary(endTop, range.endContainer, range.endOffset);
+    const { post: firstMember } = splitParagraphAtBoundary(startTop, range.startContainer, range.startOffset);
+    if(!firstMember || !lastMember) return;
+
+    const members = [];
+    let node = firstMember;
+    while(node){
+      members.push(node);
+      if(node === lastMember) break;
+      node = node.nextSibling;
+    }
+
+    const group = document.createElement('div');
+    group.className = 'vl-group';
+    group.style.borderLeftColor = color;
+    textBlock.insertBefore(group, members[0]);
+    members.forEach(m=> group.appendChild(m));
+  }
+
   $('#btnToggleVline').addEventListener('click', ()=>{
-    toggleInlineFormat('vl', span=>{ span.style.borderLeftColor = lastVlineColor; });
+    const range = getSelRange();
+    if(!range || range.collapsed){
+      showToast('먼저 문장을 드래그해서 선택해주세요');
+      return;
+    }
+    const hasFormat = $$(VL_SELECTOR, textBlock).some(node => range.intersectsNode(node));
+    if(hasFormat){
+      removeVlineFormat(range);
+    } else {
+      applyVlineFormat(range, lastVlineColor);
+    }
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    updateCanvasSize();
   });
   // Color swatches for the vertical accent line no longer repaint every
   // vline on the canvas at once. If the current selection overlaps one or
@@ -1708,8 +1836,8 @@
     lastVlineColor = color;
     const range = getSelRange();
     if(range && !range.collapsed){
-      $$('span.vl', textBlock).forEach(span=>{
-        if(range.intersectsNode(span)) span.style.borderLeftColor = color;
+      $$(VL_SELECTOR, textBlock).forEach(node=>{
+        if(range.intersectsNode(node)) node.style.borderLeftColor = color;
       });
     }
   }
@@ -2326,6 +2454,7 @@
     box.dataset.ratio = 'auto';
     box.dataset.customW = '4';
     box.dataset.customH = '5';
+    box.dataset.zoom = '100';
     box.dataset.posX = '50';
     box.dataset.posY = '50';
     box.dataset.radius = String(lastImageRadius);
@@ -2335,6 +2464,9 @@
     img.src = src;
     img.draggable = false;
     img.alt = '';
+    img.addEventListener('load', ()=>{
+      if((box.dataset.ratio || 'auto') !== 'auto') applyImageZoom(box);
+    });
 
     const cover = document.createElement('div');
     cover.className = 'image-cover';
@@ -2373,10 +2505,47 @@
       const px = box.dataset.posX || '50';
       const py = box.dataset.posY || '50';
       cover.style.backgroundPosition = px + '% ' + py + '%';
+      applyImageZoom(box);
     }
 
     const radius = box.dataset.radius != null ? box.dataset.radius : lastImageRadius;
     box.style.borderRadius = radius + 'px';
+  }
+
+  // Recomputes the cropped image's background-size from its natural pixel
+  // dimensions, the box's current on-screen size, and the zoom percentage
+  // (100% = exactly fills the ratio frame, same as CSS `cover`; anything
+  // above that magnifies the image so a smaller portion shows through).
+  // background-position (set as a %) automatically accounts for the extra
+  // size, so panning keeps working the same way at any zoom level.
+  function applyImageZoom(box){
+    const cover = box.querySelector('.image-cover');
+    const img = box.querySelector('.image-natural');
+    if(!cover || !img) return;
+    if((box.dataset.ratio || 'auto') === 'auto') return;
+
+    const naturalW = img.naturalWidth, naturalH = img.naturalHeight;
+    const boxW = box.clientWidth, boxH = box.clientHeight;
+    if(!naturalW || !naturalH || !boxW || !boxH) return;
+
+    const imgAspect = naturalW / naturalH;
+    const boxAspect = boxW / boxH;
+    let coverW, coverH;
+    if(imgAspect > boxAspect){
+      coverH = boxH;
+      coverW = boxH * imgAspect;
+    } else {
+      coverW = boxW;
+      coverH = boxW / imgAspect;
+    }
+    const zoom = Math.max(100, Math.min(300, (+box.dataset.zoom || 100))) / 100;
+    cover.style.backgroundSize = (coverW * zoom) + 'px ' + (coverH * zoom) + 'px';
+  }
+
+  function recomputeAllImageZooms(){
+    $$('.image-box', textBlock).forEach(box=>{
+      if((box.dataset.ratio || 'auto') !== 'auto') applyImageZoom(box);
+    });
   }
 
   function updateImagePosVisibility(){
@@ -2407,6 +2576,10 @@
     setSegActive('paraImageRatioSeg', box.dataset.ratio || 'auto');
     $('#paraImageCustomW').value = box.dataset.customW || '4';
     $('#paraImageCustomH').value = box.dataset.customH || '5';
+
+    const zoom = box.dataset.zoom || '100';
+    $('#paraImageZoomRange').value = zoom;
+    $('#paraImageZoomVal').textContent = zoom + '%';
 
     const posX = box.dataset.posX || '50';
     const posY = box.dataset.posY || '50';
@@ -2522,6 +2695,15 @@
   $('#paraImageCustomH').addEventListener('input', applyCustomRatioInput);
   $('#paraImageCustomW').addEventListener('blur', (e)=>{ if(!e.target.value) e.target.value = selectedImageBox ? (selectedImageBox.dataset.customW || '4') : '4'; });
   $('#paraImageCustomH').addEventListener('blur', (e)=>{ if(!e.target.value) e.target.value = selectedImageBox ? (selectedImageBox.dataset.customH || '5') : '5'; });
+
+  $('#paraImageZoomRange').addEventListener('input', (e)=>{
+    const v = e.target.value;
+    $('#paraImageZoomVal').textContent = v + '%';
+    if(selectedImageBox){
+      selectedImageBox.dataset.zoom = v;
+      applyImageZoom(selectedImageBox);
+    }
+  });
 
   $('#paraImagePosXRange').addEventListener('input', (e)=>{
     const v = e.target.value;
@@ -2693,7 +2875,7 @@
       canvas.style.overflow = 'hidden';
     }
 
-    requestAnimationFrame(updateFit);
+    requestAnimationFrame(()=>{ updateFit(); recomputeAllImageZooms(); });
   }
 
   function updateFit(){
