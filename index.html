@@ -2319,31 +2319,50 @@
     else cv.style.left = -off + 'px';
   }
 
-  // ---- export-time tail repaint ----------------------------------------
+  // ---- export-time tail handling ---------------------------------------
   // html2canvas is supposed to copy a <canvas> child's pixels directly (see
   // the comment on paintTail), and on desktop browsers it usually does.
-  // But in practice — especially on mobile browsers — html2canvas's own
-  // internal DOM walk sometimes skips or blanks a nested <canvas> that sits
-  // inside an absolutely-positioned, negative-offset element like the tail
-  // (a known html2canvas edge case, not something we can configure our way
-  // out of). Rather than depend on html2canvas to reproduce it, we stop
-  // trusting that step entirely: after html2canvas hands back the finished
-  // snapshot, we paint every tail a second time — using the exact same
-  // bezier path as paintTail() — straight onto that snapshot's own 2D
-  // context, positioned from each tail's real on-screen box. That draw
-  // happens in our own code, synchronously, on a canvas we already have
-  // pixel access to, so there's nothing left for html2canvas to drop. If
-  // html2canvas did capture the tail correctly, this just repaints the
-  // same shape in the same spot — harmless.
-  // Measures where every tailed bubble's tail canvas currently sits,
-  // relative to the artboard. Must be called right before html2canvas
-  // starts (not after it resolves) — see paintTailJobs() below for why.
-  function collectTailPaintJobs(canvasEl){
-    const canvasRect = canvasEl.getBoundingClientRect();
+  // But a nested <canvas> inside an absolutely-positioned, negative-offset
+  // box is the case it handles worst, and on mobile it either blanks the
+  // tail or draws it at the wrong size in the wrong place.
+  //
+  // Primary path (swapClonedTailsForDivs, below): hand html2canvas a shape
+  // it can't get wrong — a div with the tail as a background-image, put in
+  // the canvas's exact place in its own clone, positioned by the same CSS.
+  //
+  // Fallback path (measureTailJobs + paintTailJobs, below): if that swap
+  // can't run, fall back to the older trick of repainting the tail onto the
+  // finished snapshot by hand. It's less reliable — the coordinates come
+  // from the live page while the pixels come from html2canvas's separately
+  // laid-out copy, and any disagreement between the two shows up as a tail
+  // adrift from its bubble — but it's there so the tail is never simply
+  // missing.
+  // Measures where every tailed bubble's tail canvas sits, relative to the
+  // artboard element it lives in.
+  //
+  // `rootEl` is deliberately a parameter rather than always the live
+  // #canvas: html2canvas does NOT rasterise the live DOM. It copies the
+  // page into a hidden iframe and rasterises *that* copy, and the copy is
+  // laid out independently — it re-resolves fonts, re-lays-out any
+  // height:auto <img>, and re-runs the flex/absolute positioning from
+  // scratch. Whenever the clone's layout disagrees with the live page even
+  // slightly, coordinates measured on the live page describe a picture
+  // html2canvas never actually drew, and the repainted tail lands in the
+  // wrong place and at the wrong size. Measuring the clone instead (see
+  // captureCanvasBlob's onclone) removes that whole class of mismatch,
+  // because the numbers then come from the exact DOM being captured.
+  //
+  // Returned offsets are always relative to `rootEl` itself, so they stay
+  // valid whichever document they were taken from.
+  function measureTailJobs(rootEl){
+    if(!rootEl) return { canvasRect: null, jobs: [] };
+    const canvasRect = rootEl.getBoundingClientRect();
     if(canvasRect.width <= 0 || canvasRect.height <= 0) return { canvasRect, jobs: [] };
 
     const jobs = [];
-    $$('.bubble.has-tail', canvasEl).forEach(bubble=>{
+    // Plain querySelectorAll, not the $$ helper — rootEl may belong to
+    // html2canvas's cloned document, not this one.
+    Array.from(rootEl.querySelectorAll('.bubble.has-tail')).forEach(bubble=>{
       const row = bubble.closest('.bubble-row');
       const cv = row && row.querySelector('canvas.bubble-tail');
       if(!cv) return;
@@ -2362,25 +2381,87 @@
     return { canvasRect, jobs };
   }
 
-  // Paints the tail jobs collected by collectTailPaintJobs() onto the
-  // finished html2canvas shot.
+  // Renders the tail shape to a standalone PNG data URL, using the exact
+  // same bezier path paintTail() draws on screen.
+  function tailDataURL(side, color, size){
+    const tmp = document.createElement('canvas');
+    paintTail(tmp, side, color, size);
+    return tmp.toDataURL('image/png');
+  }
+
+  // Swaps every tail <canvas> in html2canvas's clone for an equivalent
+  // <div> that carries the tail as a background-image.
   //
-  // This used to re-measure every tail's position AFTER html2canvas had
-  // already resolved. html2canvas's own capture isn't instantaneous —
-  // walking/cloning a canvas that has an inline image sitting in it can
-  // take long enough that the image finishes decoding and the live page
-  // reflows (grows taller) WHILE html2canvas is still working. By the
-  // time the old code measured getBoundingClientRect() afterwards, the
-  // bubble's tail had already shifted to its new (post-reflow) spot, so
-  // the scale/offset math no longer matched what html2canvas had
-  // actually captured — the tail ended up painted low, near whatever
-  // content (like that same image) had pushed things down. Measuring
-  // before the capture starts (in captureCanvasBlob, via
-  // collectTailPaintJobs) and only painting here afterwards keeps both
-  // numbers pinned to the same instant, so a reflow mid-capture can no
-  // longer desync them.
+  // This is the whole fix, and it is a swap — never a removal. The div
+  // keeps the canvas's class and its inline styles, so it is positioned by
+  // exactly the same CSS rules (.bubble-tail { position:absolute; bottom:0 }
+  // plus the inline left/right offset). Nothing is measured and no
+  // coordinates are carried across, so there is nothing that can drift out
+  // of sync — html2canvas lays the tail out itself, in the same pass it
+  // lays out the bubble it hangs off.
+  //
+  // Why a background-image div rather than the <canvas> html2canvas was
+  // given: a nested, absolutely-positioned, negative-offset <canvas> is
+  // the shape html2canvas handles worst — on mobile it variously drops it,
+  // or draws it at its bitmap size instead of its CSS size and in the
+  // wrong place, which is where the stray over-sized tail came from. An
+  // absolutely-positioned div with a background-image is the primitive it
+  // is most dependable at, and it is the one every 이미지 블록 in this app
+  // already exports through.
+  //
+  // Returns how many tails were swapped, so the caller knows whether the
+  // clone actually took over — if it didn't, the old repaint path still
+  // runs and the tail is never simply lost.
+  function swapClonedTailsForDivs(rootEl){
+    if(!rootEl) return 0;
+    let swapped = 0;
+
+    Array.from(rootEl.querySelectorAll('canvas.bubble-tail')).forEach(cv=>{
+      const row = cv.closest('.bubble-row');
+      const bubble = row && row.querySelector('.bubble');
+      if(!bubble || !cv.parentNode) return;
+
+      // The tail is always square; prefer the laid-out box, fall back to
+      // the inline style if the clone hasn't resolved a rect for it.
+      const rect = cv.getBoundingClientRect();
+      const size = Math.round(rect.width) || parseInt(cv.style.width, 10) || 0;
+      if(size <= 0) return;
+
+      const side = row.classList.contains('dir-right') ? 'right' : 'left';
+      const color = bubble.dataset.color || lastBubbleColor;
+
+      let url;
+      try{ url = tailDataURL(side, color, size); }
+      catch(e){ return; }   // leave this canvas alone rather than lose the tail
+
+      const div = cv.ownerDocument.createElement('div');
+      div.className = cv.className;           // .bubble-tail — same CSS applies
+      div.setAttribute('aria-hidden', 'true');
+      div.style.cssText = cv.style.cssText;   // same width/height/left/right
+      div.style.backgroundImage = 'url(' + url + ')';
+      div.style.backgroundSize = '100% 100%';
+      div.style.backgroundRepeat = 'no-repeat';
+
+      cv.parentNode.replaceChild(div, cv);
+      swapped++;
+    });
+
+    return swapped;
+  }
+
+  // Paints the tail jobs measured by measureTailJobs() onto the finished
+  // html2canvas shot.
+  //
+  // `canvasRect` MUST be the artboard rect from the same measuring pass
+  // that produced `jobs` — the offsets and the scale factor are only
+  // meaningful together. Mixing a rect from one layout with offsets from
+  // another is what produced the misplaced, over-sized stray tail: the
+  // scale came out several times too large, so every tail got pushed away
+  // from its bubble roughly in proportion to how far down the page it sat.
+  // A tail under an inserted image is a long way down, which is why that
+  // one drifted the most.
   function paintTailJobs(shot, canvasRect, jobs){
-    if(!jobs.length || canvasRect.width <= 0 || canvasRect.height <= 0) return;
+    if(!jobs.length || !canvasRect || canvasRect.width <= 0 || canvasRect.height <= 0) return;
     const scaleX = shot.width / canvasRect.width;
     const scaleY = shot.height / canvasRect.height;
     const ctx = shot.getContext('2d');
@@ -4087,7 +4168,7 @@
   // after a DOM swap — especially for a large photo inserted mid-paragraph,
   // and especially inside the page-split export loop, which swaps whole
   // sections in and out in a tight loop and gives each one very little
-  // idle time. If collectTailPaintJobs() (called right before html2canvas
+  // idle time. If measureTailJobs() (called right before html2canvas
   // in captureCanvasBlob below) measures a tail's position while its
   // page's image is still mid-decode, it locks in the position from the
   // still-collapsed layout; when the image finishes decoding a moment
@@ -4124,13 +4205,39 @@
         await waitForFontsSettled();
         await waitForImagesSettled(canvas);
         hlState = buildExportHighlightLayer();
-        const tailPaint = collectTailPaintJobs(canvas);
+
+        // Fallback measurement, taken from the live page. Only ever used if
+        // the clone-side swap below doesn't happen (an html2canvas build
+        // without onclone, or a tail the swap had to skip) — in which case
+        // the export behaves exactly as it did before this fix, rather than
+        // losing the tail.
+        const tailPaint = measureTailJobs(canvas);
+        let tailsHandledInClone = 0;
+
         const shot = await html2canvas(canvas, {
           backgroundColor: null,
           scale: Math.min(3, (window.devicePixelRatio||1) * 2),
-          useCORS: true
+          useCORS: true,
+          // onclone hands us the offscreen copy html2canvas is about to
+          // rasterise, after its fonts and images have settled and before
+          // any pixels are drawn. It is the only place we can hand the tail
+          // to html2canvas in a form it renders reliably, while still
+          // letting html2canvas do the positioning itself.
+          onclone: (clonedDoc, clonedRoot)=>{
+            try{
+              const root = clonedRoot || (clonedDoc && clonedDoc.getElementById('canvas'));
+              if(!root) return;
+              tailsHandledInClone = swapClonedTailsForDivs(root);
+            }catch(e){ tailsHandledInClone = 0; }
+          }
         });
-        paintTailJobs(shot, tailPaint.canvasRect, tailPaint.jobs);
+
+        // The clone drew every tail itself — repainting here would only add
+        // a second copy, which is exactly the stray tail we're getting rid
+        // of. Repaint only when the clone couldn't take over.
+        if(!tailsHandledInClone){
+          paintTailJobs(shot, tailPaint.canvasRect, tailPaint.jobs);
+        }
         teardownExportHighlightLayer(hlState);
         hlState = null;
         shot.toBlob(blob=>{
@@ -4301,7 +4408,7 @@
           // anything below — a single frame isn't reliably enough time for
           // a page that just gained an image to finish settling, and
           // capturing/measuring against a still-settling layout is what
-          // sends the bubble-tail coordinates off (see collectTailPaintJobs).
+          // sends the bubble-tail coordinates off (see measureTailJobs).
           void canvas.offsetHeight;
           await new Promise(r=> requestAnimationFrame(()=> requestAnimationFrame(r)));
           const blob = await captureCanvasBlob();
