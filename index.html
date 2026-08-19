@@ -3593,7 +3593,24 @@
     requestAnimationFrame(()=>{ updateFit(); recomputeAllImageZooms(); });
   }
 
+  // While a page-split export is running, #btnDownload's handler swaps
+  // #textBlock's content and calls updateCanvasSize() once per page (to
+  // size the canvas to that page's own content). updateCanvasSize()
+  // schedules this same updateFit() on the next frame, and updateFit()
+  // unconditionally re-applies the "fit the preview pane" CSS transform
+  // to .preview-scale — undoing the transform:none the download handler
+  // deliberately forced before capturing (see the comment above the
+  // #btnDownload listener). html2canvas then captures the canvas while
+  // an ancestor still has a live `transform: scale(...)` on it, which is
+  // exactly the corrupted/overlapping-text export this flag exists to
+  // prevent. Any resize/orientation event or the ResizeObserver below
+  // could trigger the same thing mid-export, so the guard lives here —
+  // one place every path funnels through — rather than being re-applied
+  // after each individual updateCanvasSize() call in the export loop.
+  let isExportingPages = false;
+
   function updateFit(){
+    if(isExportingPages) return;
     // canvas.offsetWidth/Height always reflect its true, unscaled size —
     // CSS transform (unlike zoom) never changes an element's own layout
     // box, so this stays accurate no matter what scale was applied last.
@@ -4171,10 +4188,12 @@
     // needs doing once even when several pages get captured in a row.
     const prevTransform = previewScale.style.transform;
     const prevTransition = previewScale.style.transition;
+    isExportingPages = true;
     previewScale.style.transition = 'none';
     previewScale.style.transform = 'none';
     void previewScale.offsetHeight; // force layout flush before measuring
     const restoreTransform = ()=>{
+      isExportingPages = false;
       previewScale.style.transform = prevTransform;
       void previewScale.offsetHeight;
       previewScale.style.transition = prevTransition;
