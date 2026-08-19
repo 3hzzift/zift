@@ -342,6 +342,37 @@
   .image-move-handle:active{ cursor:grabbing; }
   .image-move-handle svg{ width:16px; height:16px; pointer-events:none; }
 
+  /* ---------- page break marker ----------
+     A non-editable divider the user drops mid-document. It never appears
+     in the exported image — 이미지 저장 splits the canvas into one image
+     per section instead. Shown as a dashed rule with a "---" label so it
+     reads like the markdown-style divider it represents. */
+  .page-break-row{
+    position:relative; width:100%;
+    -webkit-user-select:none; user-select:none;
+  }
+  .page-break-line{
+    display:flex; align-items:center; gap:10px; width:100%; padding:2px 0;
+  }
+  .page-break-line::before,
+  .page-break-line::after{
+    content:''; flex:1 1 auto; height:0; border-top:1.5px dashed var(--border);
+  }
+  .page-break-label{
+    flex:none; display:flex; align-items:center; gap:6px;
+    font-size:10.5px; font-weight:700; letter-spacing:.02em;
+    color:var(--muted); background:var(--accent-soft);
+    border-radius:999px; padding:4px 8px 4px 10px; white-space:nowrap;
+  }
+  .page-break-del{
+    flex:none; display:flex; align-items:center; justify-content:center;
+    width:16px; height:16px; border:none; border-radius:50%;
+    background:transparent; color:var(--muted); cursor:pointer; padding:0;
+    line-height:0;
+  }
+  .page-break-del:hover{ color:var(--danger); background:rgba(0,0,0,0.06); }
+  .page-break-del svg{ width:11px; height:11px; pointer-events:none; }
+
   .credit-line{
     position:relative; z-index:2;
     width:100%; opacity:0.62; white-space:pre-wrap; word-break:keep-all;
@@ -916,6 +947,17 @@
             </div>
             <input type="file" id="paraImageInput" accept="image/*" style="display:none;">
           </div>
+
+          <div class="divider"></div>
+
+          <p class="section-title">페이지 분할</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">나누고 싶은 문단 중간에 커서를 두고 눌러주세요</span></div>
+            <div class="field-row" style="margin-top:10px;">
+              <button class="btn ghost" id="btnInsertPageBreak" style="width:100%; padding:9px 12px; font-size:11.5px;">커서 위치에 페이지 분할 삽입</button>
+            </div>
+            <p class="field-hint">저장할 때 분할 지점을 기준으로 이미지가 여러 장으로 나뉘어요.</p>
+          </div>
           <div class="field" id="paraImageEditWrap" style="display:none;">
             <div class="field-row"><span class="field-label">선택된 이미지</span></div>
             <div class="field-row" style="margin-top:10px; gap:8px;">
@@ -1282,6 +1324,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (function(){
   const $ = (s, ctx) => (ctx||document).querySelector(s);
@@ -3243,6 +3286,67 @@
     showToast('사진을 넣었어요');
   }
 
+  /* ---------------- page break marker ---------------- */
+  function createPageBreakRow(){
+    const row = document.createElement('div');
+    row.className = 'page-break-row';
+    row.contentEditable = 'false';
+    row.dataset.pageBreak = 'true';
+
+    const line = document.createElement('div');
+    line.className = 'page-break-line';
+
+    const label = document.createElement('span');
+    label.className = 'page-break-label';
+    label.textContent = '--- 페이지 분할 ---';
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'page-break-del';
+    del.setAttribute('aria-label', '페이지 분할 삭제');
+    del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+    del.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      row.remove();
+      refreshPlaceholder();
+      updateCanvasSize();
+    });
+    label.appendChild(del);
+
+    line.appendChild(label);
+    row.appendChild(line);
+    return row;
+  }
+
+  // Inserts a page-break marker at the caret, splitting the current
+  // paragraph in two around it if the caret sits mid-text (same
+  // insert-at-cursor pattern insertImageAtCursor uses above).
+  function insertPageBreakAtCursor(){
+    normalizeTopLevelParagraphs();
+    const row = createPageBreakRow();
+
+    const range = getSelRange();
+    let inserted = false;
+    if(range){
+      try{
+        const r = range.cloneRange();
+        r.collapse(true);
+        r.insertNode(row);
+        inserted = true;
+      }catch(e){ inserted = false; }
+    }
+    if(!inserted) textBlock.appendChild(row);
+
+    promoteToTopLevel(row);
+
+    window.getSelection().removeAllRanges();
+    savedRange = null;
+    refreshPlaceholder();
+    updateCanvasSize();
+    showToast('페이지 분할을 넣었어요');
+  }
+  $('#btnInsertPageBreak').addEventListener('click', insertPageBreakAtCursor);
+
   $('#btnInsertParaImage').addEventListener('click', ()=> $('#paraImageInput').click());
   $('#paraImageInput').addEventListener('change', (e)=>{
     const file = e.target.files && e.target.files[0];
@@ -3805,8 +3909,8 @@
 
     Array.from(textBlock.children).forEach(el=>{
       if(!el.classList) return;
-      // Leave existing bubbles, images and 세로선 그룹 alone.
-      if(el.classList.contains('bubble-row') || el.classList.contains('image-row') || el.classList.contains('vl-group')) return;
+      // Leave existing bubbles, images, 세로선 그룹, and page breaks alone.
+      if(el.classList.contains('bubble-row') || el.classList.contains('image-row') || el.classList.contains('vl-group') || el.classList.contains('page-break-row')) return;
 
       const line = el.textContent;
       if(!line.trim()) return;
@@ -3901,6 +4005,133 @@
   }
 
   /* ---------------- download ---------------- */
+
+  // Captures the canvas artboard *as it currently sits in the DOM* into a
+  // single PNG blob (highlight-rect fix + tail repaint included). Used once
+  // for a normal single-image save, and once per section when page breaks
+  // are present — the caller is responsible for putting the right content
+  // into #textBlock before calling this.
+  function captureCanvasBlob(){
+    return new Promise(async (resolve, reject)=>{
+      let hlState = null;
+      try{
+        hlState = buildExportHighlightLayer();
+        const shot = await html2canvas(canvas, {
+          backgroundColor: null,
+          scale: Math.min(3, (window.devicePixelRatio||1) * 2),
+          useCORS: true
+        });
+        drawTailsOntoShot(shot, canvas);
+        teardownExportHighlightLayer(hlState);
+        hlState = null;
+        shot.toBlob(blob=>{
+          if(blob) resolve(blob); else reject(new Error('이미지 생성에 실패했어요'));
+        }, 'image/png');
+      }catch(err){
+        if(hlState) teardownExportHighlightLayer(hlState);
+        reject(err);
+      }
+    });
+  }
+
+  // A node counts as real content for page-split purposes the same way
+  // refreshBubbleTailGrouping treats a run-breaking paragraph: bubbles and
+  // images always count, everything else counts only if it has non-blank
+  // text.
+  function isNodeBlankForSplit(el){
+    if(!el) return true;
+    if(el.classList && (el.classList.contains('bubble-row') || el.classList.contains('image-row'))) return false;
+    return el.textContent.replace(/\u200B/g, '').trim() === '';
+  }
+
+  // Splits #textBlock's current top-level children into page groups around
+  // .page-break-row markers. Returns null when there are no markers at all
+  // (fast path — export behaves exactly as before). Otherwise always
+  // returns an array of one-or-more node-groups with the markers excluded
+  // — a marker must never end up baked into the exported image, even in
+  // the single-leftover-group edge case.
+  function splitIntoPageGroups(allNodes){
+    const hasMarker = allNodes.some(el=> el.classList && el.classList.contains('page-break-row'));
+    if(!hasMarker) return null;
+
+    const groups = [];
+    let current = [];
+    allNodes.forEach(el=>{
+      if(el.classList && el.classList.contains('page-break-row')){
+        groups.push(current);
+        current = [];
+      } else {
+        current.push(el);
+      }
+    });
+    groups.push(current);
+
+    const nonEmpty = groups.filter(g=> g.some(el=> !isNodeBlankForSplit(el)));
+    return nonEmpty.length ? nonEmpty : [[]];
+  }
+
+  // Shares (if the platform supports sharing several files as one action)
+  // or downloads. For 2+ pages, the fallback bundles everything into a
+  // single .zip instead of firing one <a download> per file — browsers
+  // (Chrome in particular) treat more than one programmatic download in
+  // a row as spam and silently block every one after the first, which is
+  // exactly why only page 1 was coming through before. A single zip is
+  // one download, so there's nothing left to block.
+  async function deliverBlobs(results){
+    if(!results.length) return;
+    const files = results.map(r=> new File([r.blob], r.filename, { type:'image/png' }));
+
+    if(navigator.canShare && navigator.canShare({ files })){
+      try{ await navigator.share({ files }); return; }
+      catch(shareErr){ /* cancelled/unsupported — fall through to download */ }
+    }
+
+    if(results.length === 1){
+      const { blob, filename } = results[0];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+      return;
+    }
+
+    if(typeof JSZip !== 'undefined'){
+      const zip = new JSZip();
+      results.forEach(r=> zip.file(r.filename, r.blob));
+      const zipBlob = await zip.generateAsync({ type:'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `발췌_${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+      return;
+    }
+
+    // JSZip failed to load (offline CDN, blocked script, etc.) — fall back
+    // to sequential downloads, staggered so the browser is less likely to
+    // treat them as a burst. Some may still be blocked; the zip path above
+    // is the normal route.
+    for(let i=0; i<results.length; i++){
+      const { blob, filename } = results[i];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+      if(i < results.length - 1) await new Promise(r=> setTimeout(r, 250));
+    }
+  }
+
   $('#btnDownload').addEventListener('click', async ()=>{
     const btn = $('#btnDownload');
     const original = btn.textContent;
@@ -3917,65 +4148,63 @@
     // mid-animation position, which is why the highlight ended up in the
     // wrong spot. Fix: kill the transition for the duration of the export,
     // force a reflow so the browser commits 'none' immediately, measure,
-    // then restore both afterwards (also snapped, not animated).
+    // then restore both afterwards (also snapped, not animated). This only
+    // needs doing once even when several pages get captured in a row.
     const prevTransform = previewScale.style.transform;
     const prevTransition = previewScale.style.transition;
     previewScale.style.transition = 'none';
     previewScale.style.transform = 'none';
     void previewScale.offsetHeight; // force layout flush before measuring
+    const restoreTransform = ()=>{
+      previewScale.style.transform = prevTransform;
+      void previewScale.offsetHeight;
+      previewScale.style.transition = prevTransition;
+    };
 
-    let hlState = null;
+    const allNodes = Array.from(textBlock.children);
+    const pageGroups = splitIntoPageGroups(allNodes);
+    let swapped = false;
+
     try{
-      hlState = buildExportHighlightLayer();
+      let results;
 
-      const shot = await html2canvas(canvas, {
-        backgroundColor: null,
-        scale: Math.min(3, (window.devicePixelRatio||1) * 2),
-        useCORS: true
-      });
-
-      // Must run before the transform/teardown restore below — the tail
-      // canvases' on-screen boxes need to still match the geometry
-      // html2canvas just captured (transform:none, highlight layer state).
-      drawTailsOntoShot(shot, canvas);
-
-      teardownExportHighlightLayer(hlState);
-      hlState = null;
-      previewScale.style.transform = prevTransform;
-      void previewScale.offsetHeight;
-      previewScale.style.transition = prevTransition;
-
-      shot.toBlob(async (blob)=>{
-        if(!blob){ showToast('이미지 생성에 실패했어요'); btn.disabled=false; btn.textContent=original; return; }
-        const filename = `발췌_${Date.now()}.png`;
-
-        if(navigator.canShare && navigator.canShare({ files:[new File([blob], filename, {type:'image/png'})] })){
-          try{
-            await navigator.share({ files:[new File([blob], filename, {type:'image/png'})] });
-            btn.disabled=false; btn.textContent=original;
-            return;
-          }catch(shareErr){ /* fall through to download */ }
+      if(!pageGroups){
+        // No page breaks anywhere — identical to the original single-image path.
+        const blob = await captureCanvasBlob();
+        results = [{ blob, filename: `발췌_${Date.now()}.png` }];
+      } else {
+        // One or more page breaks: capture each section on its own, with
+        // #textBlock temporarily holding only that section's real nodes.
+        swapped = true;
+        const ts = Date.now();
+        const total = pageGroups.length;
+        results = [];
+        for(let i=0; i<total; i++){
+          textBlock.replaceChildren(...pageGroups[i]);
+          updateCanvasSize();
+          await new Promise(r=> requestAnimationFrame(r)); // let layout settle
+          const blob = await captureCanvasBlob();
+          results.push({
+            blob,
+            filename: total > 1 ? `발췌_${ts}_${i+1}-${total}.png` : `발췌_${ts}.png`
+          });
         }
+        textBlock.replaceChildren(...allNodes);
+        updateCanvasSize();
+        swapped = false;
+      }
 
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(()=> URL.revokeObjectURL(url), 4000);
-        showToast('이미지가 저장되었어요');
-        btn.disabled = false;
-        btn.textContent = original;
-      }, 'image/png');
-
+      restoreTransform();
+      await deliverBlobs(results);
+      showToast(results.length > 1 ? `${results.length}장으로 나눠서 저장했어요` : '이미지가 저장되었어요');
     }catch(err){
-      if(hlState) teardownExportHighlightLayer(hlState);
-      previewScale.style.transform = prevTransform;
-      void previewScale.offsetHeight;
-      previewScale.style.transition = prevTransition;
+      if(swapped){
+        textBlock.replaceChildren(...allNodes);
+        updateCanvasSize();
+      }
+      restoreTransform();
       showToast('이미지 생성 중 문제가 발생했어요');
+    }finally{
       btn.disabled = false;
       btn.textContent = original;
     }
