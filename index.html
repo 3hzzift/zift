@@ -4080,11 +4080,49 @@
     await new Promise(r=> requestAnimationFrame(()=> requestAnimationFrame(r)));
   }
 
+  // Paragraph images (ratio:'auto' boxes in particular) size their row from
+  // the <img>'s own natural dimensions, so the row stays collapsed/short
+  // until that image has actually decoded a frame. On mobile this decode
+  // can easily take longer than the couple of animation frames we wait
+  // after a DOM swap — especially for a large photo inserted mid-paragraph,
+  // and especially inside the page-split export loop, which swaps whole
+  // sections in and out in a tight loop and gives each one very little
+  // idle time. If collectTailPaintJobs() (called right before html2canvas
+  // in captureCanvasBlob below) measures a tail's position while its
+  // page's image is still mid-decode, it locks in the position from the
+  // still-collapsed layout; when the image finishes decoding a moment
+  // later the row grows and pushes everything below it down, but the tail
+  // has already been measured at the old spot — it gets painted in a
+  // strange position, as if it had floated away from its bubble. Waiting
+  // here for every in-canvas image to finish decoding (or fail) before
+  // anything gets measured closes that race.
+  async function waitForImagesSettled(root){
+    const imgs = Array.from(root.querySelectorAll('img.image-natural'));
+    await Promise.all(imgs.map(img=>{
+      if(img.complete && img.naturalWidth > 0) return Promise.resolve();
+      if(img.decode){
+        return img.decode().catch(()=> new Promise(res=>{
+          img.addEventListener('load', res, { once:true });
+          img.addEventListener('error', res, { once:true });
+        }));
+      }
+      return new Promise(res=>{
+        img.addEventListener('load', res, { once:true });
+        img.addEventListener('error', res, { once:true });
+      });
+    }));
+    // A decode can change a ratio:'auto' row's height, which can shift
+    // everything after it — give layout one more settle pass before the
+    // caller measures anything.
+    if(imgs.length) await new Promise(r=> requestAnimationFrame(()=> requestAnimationFrame(r)));
+  }
+
   function captureCanvasBlob(){
     return new Promise(async (resolve, reject)=>{
       let hlState = null;
       try{
         await waitForFontsSettled();
+        await waitForImagesSettled(canvas);
         hlState = buildExportHighlightLayer();
         const tailPaint = collectTailPaintJobs(canvas);
         const shot = await html2canvas(canvas, {
