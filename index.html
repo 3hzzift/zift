@@ -4011,10 +4011,29 @@
   // for a normal single-image save, and once per section when page breaks
   // are present — the caller is responsible for putting the right content
   // into #textBlock before calling this.
+  //
+  // Before calling html2canvas we wait for document.fonts.ready plus two
+  // animation frames. Without this, text captured right after #textBlock's
+  // content was swapped (the page-break export path moves whole chunks of
+  // styled Korean text in and out of the DOM in a tight loop) could get
+  // measured before the browser had actually re-applied the custom web
+  // font (Pretendard / KoPub 돋움) to the newly-reinserted nodes — html2canvas
+  // then falls back to a fallback font's metrics while still painting the
+  // intended glyphs, so characters overlap almost on top of each other.
+  // The single-image path pays the same small wait too, since it's cheap
+  // and keeps both paths identical.
+  async function waitForFontsSettled(){
+    if(document.fonts && document.fonts.ready){
+      try{ await document.fonts.ready; }catch(e){ /* ignore */ }
+    }
+    await new Promise(r=> requestAnimationFrame(()=> requestAnimationFrame(r)));
+  }
+
   function captureCanvasBlob(){
     return new Promise(async (resolve, reject)=>{
       let hlState = null;
       try{
+        await waitForFontsSettled();
         hlState = buildExportHighlightLayer();
         const shot = await html2canvas(canvas, {
           backgroundColor: null,
