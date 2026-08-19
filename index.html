@@ -575,6 +575,14 @@
   /* ---------- toggle switch (on/off settings, grouped 2-up like a KakaoTalk
      style settings sheet) ---------- */
   .toggle-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(136px, 1fr)); gap:10px; }
+  /* 3개를 한 줄에 나란히 두는 압축 변형. 모바일 패널 폭에서도 줄바꿈되지
+     않도록 칸 폭을 고정하고 라벨·스위치를 한 단계씩 줄인다. */
+  .toggle-grid.cols-3{ grid-template-columns:repeat(3, 1fr); gap:7px; }
+  .toggle-grid.cols-3 .toggle-row{ padding:9px 8px 9px 10px; gap:5px; }
+  .toggle-grid.cols-3 .toggle-row-label{ font-size:10.5px; white-space:nowrap; }
+  .toggle-grid.cols-3 .toggle-switch{ width:34px; height:20px; border-radius:10px; }
+  .toggle-grid.cols-3 .toggle-switch::after{ width:16px; height:16px; }
+  .toggle-grid.cols-3 .toggle-switch.on::after{ transform:translateX(14px); }
   .toggle-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     background:var(--accent-soft); border-radius:12px; padding:12px 12px 12px 14px;
@@ -758,7 +766,7 @@
           </div>
           <p class="section-title">붙여넣기 자동 서식</p>
           <div class="field">
-            <div class="toggle-grid">
+            <div class="toggle-grid cols-3">
               <div class="toggle-row">
                 <span class="toggle-row-label">대사</span>
                 <button type="button" class="toggle-switch on" id="pasteQuoteFormatToggle" role="switch" aria-checked="true" aria-label="대사 자동 서식"></button>
@@ -773,6 +781,10 @@
               </div>
             </div>
             <p class="field-hint">꺼두면 붙여넣을 때 그대로 붙어요. 켜두면 " "나 " "로 감싼 부분(또는 '이름 | 내용' 형식)은 대사 서식으로, *기울임*은 기울임체로, **볼드**는 굵게 자동 적용돼요. 대사를 따옴표로 만들지 말풍선으로 만들지, 화자 이름을 어떻게 인식할지는 '대사' 탭에서 설정해요.</p>
+
+            <div class="field-row" style="margin-top:14px;">
+              <button class="btn ghost" id="btnConvertExisting" style="width:100%; padding:9px 12px; font-size:11.5px;">현재 텍스트 자동변환</button>
+            </div>
           </div>
 
           <div class="divider"></div>
@@ -3645,6 +3657,69 @@
     refreshPlaceholder();
     updateCanvasSize();
   });
+
+  /* ---------------- 현재 텍스트 자동변환 ----------------
+     Applies the same rules the paste handler uses to text that's already in
+     the editor. Only lines that actually contain a convertible marker are
+     touched — a line is rebuilt from its plain text, so any manual styling
+     on it (색상, 형광펜, 밑줄 등) would otherwise be silently wiped. Bubbles
+     and images are skipped entirely. */
+  function lineHasConvertibleMarkers(line, bubbleMode){
+    if(state.pasteBoldFormat && /\*\*[^*\n]+\*\*/.test(line)) return true;
+    if(state.pasteItalicFormat && /\*[^*\n]+\*/.test(line)) return true;
+    if(state.pasteQuoteFormat){
+      QUOTE_SEGMENT_RE.lastIndex = 0;
+      if(QUOTE_SEGMENT_RE.test(line)) return true;
+      if(bubbleMode && extractSpeakerLine(line.trim())) return true;
+    }
+    return false;
+  }
+
+  function convertExistingText(){
+    if(!state.pasteQuoteFormat && !state.pasteItalicFormat && !state.pasteBoldFormat){
+      showToast('자동 서식이 모두 꺼져 있어요');
+      return;
+    }
+    normalizeTopLevelParagraphs();
+    const bubbleMode = state.pasteQuoteFormat && state.pasteQuoteFormatMode === 'bubble';
+    let converted = 0;
+
+    Array.from(textBlock.children).forEach(el=>{
+      if(!el.classList) return;
+      // Leave existing bubbles, images and 세로선 그룹 alone.
+      if(el.classList.contains('bubble-row') || el.classList.contains('image-row') || el.classList.contains('vl-group')) return;
+
+      const line = el.textContent;
+      if(!line.trim()) return;
+
+      let speakerName = null;
+      let contentLine = line;
+      if(bubbleMode){
+        const extracted = extractSpeakerLine(line.trim());
+        if(extracted){ speakerName = extracted.name; contentLine = extracted.rest; }
+      }
+      const wholeLineMatch = bubbleMode ? contentLine.trim().match(WHOLE_LINE_QUOTE_RE) : null;
+
+      if(bubbleMode && (wholeLineMatch || speakerName)){
+        const inner = wholeLineMatch
+          ? (wholeLineMatch[1] !== undefined ? wholeLineMatch[1] : wholeLineMatch[2])
+          : contentLine.trim();
+        el.replaceWith(buildBubbleRowForPaste(inner, speakerName));
+        converted++;
+        return;
+      }
+
+      if(!lineHasConvertibleMarkers(line, bubbleMode)) return;
+      el.innerHTML = '';
+      el.appendChild(buildLineFragment(line));
+      converted++;
+    });
+
+    refreshPlaceholder();
+    updateCanvasSize();
+    showToast(converted ? `${converted}줄을 변환했어요` : '변환할 표시가 있는 줄이 없어요');
+  }
+  $('#btnConvertExisting').addEventListener('click', convertExistingText);
 
   /* ---------------- clear ---------------- */
   $('#btnClear').addEventListener('click', ()=>{
