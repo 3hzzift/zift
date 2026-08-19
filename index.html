@@ -2335,14 +2335,14 @@
   // pixel access to, so there's nothing left for html2canvas to drop. If
   // html2canvas did capture the tail correctly, this just repaints the
   // same shape in the same spot — harmless.
-  function drawTailsOntoShot(shot, canvasEl){
+  // Measures where every tailed bubble's tail canvas currently sits,
+  // relative to the artboard. Must be called right before html2canvas
+  // starts (not after it resolves) — see paintTailJobs() below for why.
+  function collectTailPaintJobs(canvasEl){
     const canvasRect = canvasEl.getBoundingClientRect();
-    if(canvasRect.width <= 0 || canvasRect.height <= 0) return;
-    const scaleX = shot.width / canvasRect.width;
-    const scaleY = shot.height / canvasRect.height;
-    const ctx = shot.getContext('2d');
-    if(!ctx) return;
+    if(canvasRect.width <= 0 || canvasRect.height <= 0) return { canvasRect, jobs: [] };
 
+    const jobs = [];
     $$('.bubble.has-tail', canvasEl).forEach(bubble=>{
       const row = bubble.closest('.bubble-row');
       const cv = row && row.querySelector('canvas.bubble-tail');
@@ -2350,14 +2350,48 @@
       const cvRect = cv.getBoundingClientRect();
       if(cvRect.width <= 0 || cvRect.height <= 0) return;
 
-      const side = row.classList.contains('dir-right') ? 'right' : 'left';
-      const spec = TAIL_SEGMENTS[side];
-      const color = bubble.dataset.color || lastBubbleColor;
+      jobs.push({
+        side: row.classList.contains('dir-right') ? 'right' : 'left',
+        color: bubble.dataset.color || lastBubbleColor,
+        left: cvRect.left - canvasRect.left,
+        top: cvRect.top - canvasRect.top,
+        width: cvRect.width,
+        height: cvRect.height
+      });
+    });
+    return { canvasRect, jobs };
+  }
 
-      const x0 = (cvRect.left - canvasRect.left) * scaleX;
-      const y0 = (cvRect.top - canvasRect.top) * scaleY;
-      const w = cvRect.width * scaleX;
-      const h = cvRect.height * scaleY;
+  // Paints the tail jobs collected by collectTailPaintJobs() onto the
+  // finished html2canvas shot.
+  //
+  // This used to re-measure every tail's position AFTER html2canvas had
+  // already resolved. html2canvas's own capture isn't instantaneous —
+  // walking/cloning a canvas that has an inline image sitting in it can
+  // take long enough that the image finishes decoding and the live page
+  // reflows (grows taller) WHILE html2canvas is still working. By the
+  // time the old code measured getBoundingClientRect() afterwards, the
+  // bubble's tail had already shifted to its new (post-reflow) spot, so
+  // the scale/offset math no longer matched what html2canvas had
+  // actually captured — the tail ended up painted low, near whatever
+  // content (like that same image) had pushed things down. Measuring
+  // before the capture starts (in captureCanvasBlob, via
+  // collectTailPaintJobs) and only painting here afterwards keeps both
+  // numbers pinned to the same instant, so a reflow mid-capture can no
+  // longer desync them.
+  function paintTailJobs(shot, canvasRect, jobs){
+    if(!jobs.length || canvasRect.width <= 0 || canvasRect.height <= 0) return;
+    const scaleX = shot.width / canvasRect.width;
+    const scaleY = shot.height / canvasRect.height;
+    const ctx = shot.getContext('2d');
+    if(!ctx) return;
+
+    jobs.forEach(job=>{
+      const spec = TAIL_SEGMENTS[job.side];
+      const x0 = job.left * scaleX;
+      const y0 = job.top * scaleY;
+      const w = job.width * scaleX;
+      const h = job.height * scaleY;
 
       ctx.save();
       ctx.translate(x0, y0);
@@ -2366,7 +2400,7 @@
       ctx.moveTo(spec.start[0], spec.start[1]);
       spec.curves.forEach(c=> ctx.bezierCurveTo(c[0], c[1], c[2], c[3], c[4], c[5]));
       ctx.closePath();
-      ctx.fillStyle = color;
+      ctx.fillStyle = job.color;
       ctx.fill();
       ctx.restore();
     });
@@ -4052,12 +4086,13 @@
       try{
         await waitForFontsSettled();
         hlState = buildExportHighlightLayer();
+        const tailPaint = collectTailPaintJobs(canvas);
         const shot = await html2canvas(canvas, {
           backgroundColor: null,
           scale: Math.min(3, (window.devicePixelRatio||1) * 2),
           useCORS: true
         });
-        drawTailsOntoShot(shot, canvas);
+        paintTailJobs(shot, tailPaint.canvasRect, tailPaint.jobs);
         teardownExportHighlightLayer(hlState);
         hlState = null;
         shot.toBlob(blob=>{
@@ -4220,7 +4255,17 @@
         for(let i=0; i<total; i++){
           textBlock.replaceChildren(...pageGroups[i]);
           updateCanvasSize();
-          await new Promise(r=> requestAnimationFrame(r)); // let layout settle
+          // Force the browser to flush the layout recalculation triggered by
+          // the swap immediately, instead of leaving it pending until
+          // whenever the next frame happens to be. Then wait two full
+          // animation frames (the same "guaranteed at least one paint has
+          // completed" pattern used in waitForFontsSettled) before touching
+          // anything below — a single frame isn't reliably enough time for
+          // a page that just gained an image to finish settling, and
+          // capturing/measuring against a still-settling layout is what
+          // sends the bubble-tail coordinates off (see collectTailPaintJobs).
+          void canvas.offsetHeight;
+          await new Promise(r=> requestAnimationFrame(()=> requestAnimationFrame(r)));
           const blob = await captureCanvasBlob();
           results.push({
             blob,
