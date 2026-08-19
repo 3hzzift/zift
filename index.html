@@ -71,7 +71,7 @@
     .cp-modal.open{ transform:translate(-50%, -50%); }
   }
   .cp-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-  .cp-title{ font-size:14px; font-weight:700; }
+  .cp-title{ font-size:13px; font-weight:700; }
   .cp-close{ border:none; background:transparent; color:var(--muted); padding:4px; cursor:pointer; line-height:0; }
   .cp-close svg{ width:18px; height:18px; }
 
@@ -100,12 +100,12 @@
     border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin-bottom:16px;
   }
   .cp-preview{ width:24px; height:24px; border-radius:50%; box-shadow:0 0 0 1px var(--border); flex:none; }
-  .cp-hex-prefix{ color:var(--muted); font-weight:600; font-size:14px; }
+  .cp-hex-prefix{ color:var(--muted); font-weight:600; font-size:13px; }
   #cpHexInput{
-    flex:1; min-width:0; border:none; outline:none; font-size:15px; letter-spacing:.03em;
+    flex:1; min-width:0; border:none; outline:none; font-size:14px; letter-spacing:.03em;
     font-family:inherit; text-transform:uppercase; color:var(--ink); background:transparent;
   }
-  .cp-done{ width:100%; padding:11px 0; font-size:13.5px; }
+  .cp-done{ width:100%; padding:11px 0; font-size:12.5px; }
 
   .app{ max-width:1180px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
 
@@ -119,11 +119,11 @@
   }
   .brand{ display:flex; align-items:baseline; gap:8px; }
   .brand-mark{ width:9px; height:9px; border-radius:2px; background:var(--accent); transform:rotate(45deg); flex:none; }
-  .brand h1{ font-size:16px; font-weight:600; margin:0; letter-spacing:-0.01em; }
+  .brand h1{ font-size:15px; font-weight:600; margin:0; letter-spacing:-0.01em; }
   .topbar-actions{ display:flex; gap:8px; }
   .btn{
     border:1px solid var(--border); background:var(--panel); color:var(--ink);
-    padding:9px 14px; border-radius:999px; font-size:13px; font-weight:600;
+    padding:9px 14px; border-radius:999px; font-size:12px; font-weight:600;
     cursor:pointer; transition:transform .12s ease, background .12s ease; white-space:nowrap;
   }
   .btn:active{ transform:scale(0.96); }
@@ -206,6 +206,14 @@
     caret-color:currentColor; cursor:text;
   }
   .text-block *{ position:static !important; float:none !important; }
+  /* 위 규칙은 붙여넣은 외부 HTML이 제멋대로 position/float를 들고 오는 걸
+     막으려는 것인데, 우리가 직접 만든 말풍선·이미지 블록까지 static으로
+     되돌려 버리면 그 안의 absolute 요소(말풍선 꼬리, 드래그 손잡이 등)가
+     기준점을 잃고 캔버스 맨 아래로 떨어져 나간다. 이 블록들만 예외. */
+  .text-block .bubble-row,
+  .text-block .bubble,
+  .text-block .image-row,
+  .text-block .image-box{ position:relative !important; }
   .text-block[data-empty="true"]::before{
     content:attr(data-placeholder);
     opacity:0.38;
@@ -244,25 +252,66 @@
 
   .bubble-row{
     position:relative;
-    display:flex; width:100%;
+    display:flex; flex-direction:column; width:100%;
     margin:calc(var(--para-gap,16px) * 0.6) 0;
     transition:padding-top .12s ease;
   }
-  .bubble-row.dir-left{ justify-content:flex-start; }
-  .bubble-row.dir-right{ justify-content:flex-end; }
+  .bubble-row.dir-left{ align-items:flex-start; }
+  .bubble-row.dir-right{ align-items:flex-end; }
   .bubble-row.row-selected{ padding-top:26px; }
   .bubble-row.dragging{ opacity:0.55; }
+  .bubble-speaker{
+    max-width:84%; margin:0 0 4px 4px;
+    font-size:0.78em; font-weight:700; line-height:1.3;
+    color:var(--muted); word-break:keep-all; overflow-wrap:break-word;
+  }
+  .bubble-row.dir-right .bubble-speaker{ margin:0 4px 4px 0; text-align:right; }
+  /* 같은 화자가 연달아 보낸 말풍선: 두 번째부터는 이름표를 숨기고,
+     위 말풍선과의 간격도 좁혀서 하나의 묶음처럼 보이게 한다. */
+  .bubble-row.speaker-hidden .bubble-speaker{ display:none; }
+  .bubble-row.speaker-hidden{ margin-top:calc(var(--para-gap,16px) * 0.18); }
   .bubble{
     position:relative;
     display:inline-block; max-width:84%;
-    padding:0.65em 0.9em; border-radius:1.1em;
+    padding:14px 20px; border-radius:26px;
     font-size:0.92em; line-height:1.45;
     white-space:pre-wrap; word-break:keep-all; overflow-wrap:break-word;
-    cursor:text; outline:none;
+    cursor:text; outline-offset:1px;
   }
-  .bubble-row.dir-left .bubble{ border-bottom-left-radius:0.3em; }
-  .bubble-row.dir-right .bubble{ border-bottom-right-radius:0.3em; }
-  .bubble.selected{ box-shadow:0 0 0 2px var(--accent); }
+  .bubble.selected{ outline:2px solid var(--accent); }
+
+  /* "모서리" 말풍선 꼬리: 첨부 레퍼런스(iMessage)처럼 말풍선 아래쪽
+     모서리에서 갈고리 모양으로 휘어져 나오는 꼬리.
+     둥근 사각형을 회전시키는 방식은 각도·반지름이 조금만 어긋나도
+     동그라미가 따로 떨어진 것처럼 보여서, 꼬리 실루엣을 SVG path로
+     직접 그린 뒤 mask로 찍어낸다. 색은 mask 위에 깔리는
+     background-color(--bubble-bg)가 그대로 담당하므로 말풍선 색을
+     바꾸면 꼬리도 같이 따라온다.
+     같은 방향(왼쪽/오른쪽)으로 연달아 이어지는 말풍선들 중 마지막
+     말풍선에만 붙는다(refreshBubbleTailGrouping). */
+  .bubble.has-tail::after{
+    content:'';
+    position:absolute;
+    bottom:-2px;
+    width:var(--tail-size, 20px); height:var(--tail-size, 20px);
+    background-color:var(--bubble-bg, currentColor);
+    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+    -webkit-mask-size:100% 100%; mask-size:100% 100%;
+    pointer-events:none;
+  }
+  .bubble-row.dir-left .bubble.has-tail::after{
+    left:calc(var(--tail-size, 20px) * -0.4);
+    -webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20d='M18%202%20C18%2010%2014%2015%204%2017.5%20C10%2014%2012%209%2011%202%20Z'%20fill='black'/%3E%3C/svg%3E");
+    mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20d='M18%202%20C18%2010%2014%2015%204%2017.5%20C10%2014%2012%209%2011%202%20Z'%20fill='black'/%3E%3C/svg%3E");
+  }
+  .bubble-row.dir-right .bubble.has-tail::after{
+    right:calc(var(--tail-size, 20px) * -0.4);
+    -webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20d='M0%202%20C0%2010%204%2015%2014%2017.5%20C8%2014%206%209%207%202%20Z'%20fill='black'/%3E%3C/svg%3E");
+    mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20d='M0%202%20C0%2010%204%2015%2014%2017.5%20C8%2014%206%209%207%202%20Z'%20fill='black'/%3E%3C/svg%3E");
+  }
+  /* 내용이 빈 말풍선은 꼬리를 그리지 않는다 — 본체가 거의 보이지 않는
+     상태에서 꼬리만 남으면 허공에 점 하나가 떠 있는 것처럼 보인다. */
+  .bubble:empty::after{ display:none; }
 
   /* Drag handle: only visible while its bubble is selected. Lets the
      whole bubble row be grabbed and dropped between paragraphs. */
@@ -291,14 +340,6 @@
     cursor:pointer;
     overflow:hidden;
     line-height:0;
-    /* Chromium/WebKit sometimes leave the border-radius clip and the
-       cropped background-image a frame stale after aspect-ratio or
-       background-size change on their own — the fix is unrelated CSS
-       (a click, typing) forcing a repaint. Giving the box its own
-       composited layer keeps it painting immediately on every change. */
-    transform:translateZ(0);
-    -webkit-transform:translateZ(0);
-    backface-visibility:hidden;
   }
   .image-box img.image-natural{
     display:block; width:100%; height:auto;
@@ -333,13 +374,19 @@
   .credit-inputs{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .credit-inputs input[type="text"]{
     width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
-    background:var(--panel); color:var(--ink); font-size:13px;
+    background:var(--panel); color:var(--ink); font-size:12px;
   }
   .credit-inputs input[type="text"]::placeholder{ color:var(--muted); }
 
+  .text-input{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel); color:var(--ink); font-size:12px; font-family:inherit;
+  }
+  .text-input::placeholder{ color:var(--muted); }
+
   .canvas-meta{
     display:flex; align-items:center; justify-content:center; gap:10px;
-    font-size:11px; color:var(--muted); padding-top:8px; letter-spacing:.02em;
+    font-size:10.5px; color:var(--muted); padding-top:8px; letter-spacing:.02em;
   }
   .canvas-meta .dot{ width:4px; height:4px; border-radius:50%; background:var(--border); }
 
@@ -399,13 +446,13 @@
   }
   @media (min-width:900px){
     .tabs{ top:0; }
-    .tab{ flex-direction:row; gap:0; padding:9px 10px; font-size:13px; border-radius:8px; }
+    .tab{ flex-direction:row; gap:0; padding:9px 10px; font-size:12px; border-radius:8px; }
     .tab svg{ display:none; }
   }
   .tab{
     flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
     border:none; background:transparent; color:var(--muted);
-    padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer;
+    padding:8px 10px; border-radius:10px; font-size:11px; font-weight:600; cursor:pointer;
   }
   .tab svg{ width:19px; height:19px; }
   .tab.active{ background:var(--panel); color:var(--ink); box-shadow:0 0 0 1px var(--border); }
@@ -415,14 +462,14 @@
 
   .field{ margin-bottom:22px; }
   .field-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .field-label{ font-size:12.5px; font-weight:600; color:var(--ink); letter-spacing:.01em; }
-  .field-value{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .field-hint{ font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.5; }
+  .field-label{ font-size:11.5px; font-weight:600; color:var(--ink); letter-spacing:.01em; }
+  .field-value{ font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .field-hint{ font-size:10.5px; color:var(--muted); margin-top:8px; line-height:1.5; }
 
   .seg{ display:flex; background:var(--panel); border:1px solid var(--border); border-radius:9px; padding:3px; gap:2px; }
   .seg button{
     flex:1; border:none; background:transparent; color:var(--muted);
-    padding:8px 6px; border-radius:6px; font-size:12.5px; font-weight:600; cursor:pointer;
+    padding:8px 6px; border-radius:6px; font-size:11.5px; font-weight:600; cursor:pointer;
   }
   .seg button.active{ background:var(--accent); color:#fff; }
 
@@ -433,19 +480,19 @@
   .ratio-custom-row input[type="number"]{
     -moz-appearance:textfield; appearance:textfield;
     flex:1; min-width:0; width:100%; border:1px solid var(--border); border-radius:8px;
-    padding:9px 10px; font-size:13px; font-weight:600; color:var(--ink);
+    padding:9px 10px; font-size:12px; font-weight:600; color:var(--ink);
     background:var(--panel); text-align:center; font-variant-numeric:tabular-nums;
   }
   .ratio-custom-row input[type="number"]::-webkit-outer-spin-button,
   .ratio-custom-row input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
   .ratio-custom-row input[type="number"]:focus{ outline:none; border-color:var(--accent); }
-  .ratio-custom-row .ratio-custom-sep{ font-size:13px; font-weight:700; color:var(--muted); flex:none; }
+  .ratio-custom-row .ratio-custom-sep{ font-size:12px; font-weight:700; color:var(--muted); flex:none; }
 
   .format-btn-row{ display:flex; flex-wrap:wrap; gap:8px; }
   .format-btn{
     flex:0 0 auto; width:44px; height:44px; display:inline-flex; align-items:center; justify-content:center;
     border:1px solid var(--border); background:var(--panel); color:var(--ink);
-    padding:0; border-radius:10px; font-size:15px; cursor:pointer;
+    padding:0; border-radius:10px; font-size:14px; cursor:pointer;
     transition:transform .12s ease, background .12s ease, color .12s ease;
   }
   .format-btn:active{ transform:scale(0.95); }
@@ -456,7 +503,7 @@
   .format-btn .fmt-u{ text-decoration:underline; text-underline-offset:2px; font-weight:700; }
   .format-btn .fmt-q{ font-weight:800; font-family:Georgia, 'Times New Roman', serif; }
   .format-btn .fmt-vl{ display:inline-block; width:3px; height:14px; background:currentColor; border-radius:1px; vertical-align:-2px; }
-  .format-btn.label{ width:auto; flex:1 1 0; min-width:64px; height:44px; padding:0 4px; font-size:12.5px; font-weight:700; }
+  .format-btn.label{ width:auto; flex:1 1 0; min-width:64px; height:44px; padding:0 4px; font-size:11px; font-weight:700; }
 
   .accordion-head{
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -490,16 +537,64 @@
   @keyframes swatchPressRing{ from{ opacity:.12; transform:scale(.55); } to{ opacity:1; transform:scale(1); } }
   .swatch-add{
     width:28px; height:28px; border-radius:50%; border:1px dashed var(--muted);
-    background:transparent; color:var(--muted); font-size:15px; line-height:1;
+    background:transparent; color:var(--muted); font-size:14px; line-height:1;
     display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none;
   }
 
   select.select{
     width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
-    background:var(--panel); color:var(--ink); font-size:13.5px; font-weight:500;
+    background:var(--panel); color:var(--ink); font-size:12.5px; font-weight:500;
   }
 
-  .section-title{ font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--muted); text-transform:uppercase; margin:0 0 14px; }
+  /* ---------- shape picker (preview-thumbnail card selector) ---------- */
+  .shape-picker{ display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:10px; }
+  .shape-card{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    border:1.5px solid var(--border); border-radius:14px; background:var(--panel);
+    padding:14px 8px 12px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+    transition:border-color .12s ease, transform .12s ease;
+  }
+  .shape-card:active{ transform:scale(0.97); }
+  .shape-card.active{ border-color:var(--ink); border-width:2px; }
+  .shape-card-label{ font-size:11px; font-weight:600; color:var(--ink); }
+  .shape-preview{
+    position:relative; width:52px; height:34px; border-radius:16px;
+    background:var(--border); flex:none;
+  }
+  .shape-preview.shape-basic{ border-radius:16px 16px 16px 5px; }
+  .shape-preview.shape-square{ position:relative; border-radius:16px; }
+  .shape-preview.shape-square::after{
+    content:''; position:absolute; bottom:-1px; left:-6px;
+    width:15px; height:15px; background-color:var(--border);
+    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+    -webkit-mask-size:100% 100%; mask-size:100% 100%;
+    -webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20d='M18%202%20C18%2010%2014%2015%204%2017.5%20C10%2014%2012%209%2011%202%20Z'%20fill='black'/%3E%3C/svg%3E");
+    mask-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20d='M18%202%20C18%2010%2014%2015%204%2017.5%20C10%2014%2012%209%2011%202%20Z'%20fill='black'/%3E%3C/svg%3E");
+  }
+
+  /* ---------- toggle switch (on/off settings, grouped 2-up like a KakaoTalk
+     style settings sheet) ---------- */
+  .toggle-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(136px, 1fr)); gap:10px; }
+  .toggle-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--accent-soft); border-radius:12px; padding:12px 12px 12px 14px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .toggle-row-label{ font-size:11.5px; font-weight:600; color:var(--ink); line-height:1.3; }
+  .toggle-switch{
+    position:relative; width:40px; height:24px; border-radius:12px; flex:none;
+    border:none; padding:0; margin:0; background:var(--border); cursor:pointer;
+    transition:background .15s ease;
+  }
+  .toggle-switch::after{
+    content:''; position:absolute; top:2px; left:2px; width:20px; height:20px;
+    border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(17,17,17,0.28);
+    transition:transform .15s ease;
+  }
+  .toggle-switch.on{ background:var(--ink); }
+  .toggle-switch.on::after{ transform:translateX(16px); }
+
+  .section-title{ font-size:10px; font-weight:700; letter-spacing:.08em; color:var(--muted); text-transform:uppercase; margin:0 0 14px; }
   .divider{ height:1px; background:var(--border); margin:22px 0; }
 
   .row-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
@@ -507,7 +602,7 @@
   .toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:#fff; padding:10px 18px; border-radius:999px;
-    font-size:13px; font-weight:500; opacity:0; pointer-events:none; transition:all .25s ease; z-index:100;
+    font-size:12px; font-weight:500; opacity:0; pointer-events:none; transition:all .25s ease; z-index:100;
     box-shadow:0 8px 24px rgba(0,0,0,0.2);
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
@@ -517,7 +612,7 @@
   .preset-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; cursor:pointer; user-select:none; }
   .preset-head .section-title{ margin:0; }
   .preset-head-right{ display:flex; align-items:center; gap:8px; }
-  .preset-hint{ font-size:11px; color:var(--muted); white-space:nowrap; }
+  .preset-hint{ font-size:10px; color:var(--muted); white-space:nowrap; }
   .preset-caret{
     display:flex; align-items:center; justify-content:center;
     width:20px; height:20px; flex:none; color:var(--muted);
@@ -534,13 +629,13 @@
   }
   .preset-slot.filled{ border-color:var(--accent); }
   .preset-slot-label{ display:flex; flex-direction:column; gap:2px; min-width:0; }
-  .preset-slot-name{ font-size:12.5px; font-weight:700; color:var(--ink); }
-  .preset-slot-status{ font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .preset-slot-name{ font-size:11.5px; font-weight:700; color:var(--ink); }
+  .preset-slot-status{ font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .preset-slot.filled .preset-slot-status{ color:var(--accent); }
   .preset-slot-actions{ display:flex; align-items:center; gap:6px; flex:none; }
   .preset-btn{
     border:1px solid var(--border); background:var(--panel); color:var(--ink);
-    padding:7px 12px; border-radius:999px; font-size:12px; font-weight:600;
+    padding:7px 12px; border-radius:999px; font-size:11px; font-weight:600;
     cursor:pointer; transition:transform .12s ease, opacity .12s ease; white-space:nowrap;
   }
   .preset-btn:active{ transform:scale(0.95); }
@@ -593,6 +688,10 @@
         <button class="tab active" data-tab="text">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="16" y2="12"></line><line x1="4" y1="17" x2="12" y2="17"></line></svg>
           <span>문장 설정</span>
+        </button>
+        <button class="tab" data-tab="dialogue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+          <span>대사</span>
         </button>
         <button class="tab" data-tab="canvas">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M3 16l5.5-5.5a1.5 1.5 0 0 1 2.1 0L17 17"></path></svg>
@@ -659,16 +758,21 @@
           </div>
           <p class="section-title">붙여넣기 자동 서식</p>
           <div class="field">
-            <div class="format-btn-row">
-              <button class="format-btn label active" id="btnPasteQuoteFormat">따옴표</button>
-              <button class="format-btn label active" id="btnPasteItalicFormat">기울임</button>
+            <div class="toggle-grid">
+              <div class="toggle-row">
+                <span class="toggle-row-label">대사</span>
+                <button type="button" class="toggle-switch on" id="pasteQuoteFormatToggle" role="switch" aria-checked="true" aria-label="대사 자동 서식"></button>
+              </div>
+              <div class="toggle-row">
+                <span class="toggle-row-label">기울임</span>
+                <button type="button" class="toggle-switch on" id="pasteItalicFormatToggle" role="switch" aria-checked="true" aria-label="기울임 자동 서식"></button>
+              </div>
+              <div class="toggle-row">
+                <span class="toggle-row-label">볼드</span>
+                <button type="button" class="toggle-switch on" id="pasteBoldFormatToggle" role="switch" aria-checked="true" aria-label="볼드 자동 서식"></button>
+              </div>
             </div>
-            <div class="field-row" id="pasteQuoteModeRow" style="margin-top:12px;"><span class="field-label">따옴표 적용 방식</span></div>
-            <div class="seg" id="pasteQuoteModeSeg">
-              <button data-value="quote" class="active">따옴표</button>
-              <button data-value="bubble">말풍선</button>
-            </div>
-            <p class="field-hint">버튼을 다시 누르면 꺼져요. 켜두면 붙여넣을 때 " "나 “ ”로 감싼 부분은 따옴표 서식(또는 한 줄 전체가 통째로 감싸져 있으면 말풍선)으로, *기울임*으로 감싼 부분은 기울임체로 자동 적용돼요.</p>
+            <p class="field-hint">꺼두면 붙여넣을 때 그대로 붙어요. 켜두면 " "나 " "로 감싼 부분(또는 '이름 | 내용' 형식)은 대사 서식으로, *기울임*은 기울임체로, **볼드**는 굵게 자동 적용돼요. 대사를 따옴표로 만들지 말풍선으로 만들지, 화자 이름을 어떻게 인식할지는 '대사' 탭에서 설정해요.</p>
           </div>
 
           <div class="divider"></div>
@@ -766,7 +870,7 @@
                   <input type="hidden" id="hlCustom" value="#ffe066"><button type="button" class="cp-trigger" data-for="hlCustom" aria-label="형광펜 색 직접 선택"></button>
                 </div>
                 <div class="field-row" style="margin-top:12px;">
-                  <button class="btn ghost" id="btnHlClear" style="padding:8px 12px; font-size:12.5px;">선택한 형광펜 지우기</button>
+                  <button class="btn ghost" id="btnHlClear" style="padding:8px 12px; font-size:11.5px;">선택한 형광펜 지우기</button>
                 </div>
               </div>
 
@@ -782,7 +886,7 @@
                   <input type="hidden" id="tcCustom" value="#e5342b"><button type="button" class="cp-trigger" data-for="tcCustom" aria-label="부분 글자색 직접 선택"></button>
                 </div>
                 <div class="field-row" style="margin-top:12px;">
-                  <button class="btn ghost" id="btnTcClear" style="padding:8px 12px; font-size:12.5px;">선택한 글자색 지우기</button>
+                  <button class="btn ghost" id="btnTcClear" style="padding:8px 12px; font-size:11.5px;">선택한 글자색 지우기</button>
                 </div>
               </div>
 
@@ -817,107 +921,11 @@
 
           <div class="divider"></div>
 
-          <div class="accordion collapsed" id="quoteAccordion">
-            <button type="button" class="accordion-head" id="quoteAccordionHead" aria-expanded="false">
-              <span class="section-title" style="margin:0;">따옴표 서식</span>
-              <span class="accordion-caret">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </span>
-            </button>
-            <div class="accordion-body" id="quoteAccordionBody">
-
-              <p class="section-title">기울임</p>
-              <div class="field">
-                <div class="seg" id="quoteItalicSeg">
-                  <button data-value="on" class="active">사용</button>
-                  <button data-value="off">해제</button>
-                </div>
-              </div>
-
-              <p class="section-title">따옴표 색</p>
-              <div class="field">
-                <div class="swatches" id="quoteColorSwatches">
-                  <span class="swatch active" data-qc="#8C8C8C" style="background:#8C8C8C"></span>
-                  <span class="swatch" data-qc="#B3554B" style="background:#B3554B"></span>
-                  <span class="swatch" data-qc="#33415C" style="background:#33415C"></span>
-                  <span class="swatch" data-qc="#111111" style="background:#111111"></span>
-                  <span class="swatch" data-qc="#FFFFFF" style="background:#FFFFFF"></span>
-                  <input type="hidden" id="qcCustom" value="#8c8c8c"><button type="button" class="cp-trigger" data-for="qcCustom" aria-label="따옴표 색 직접 선택"></button>
-                </div>
-              </div>
-
-              <p class="section-title">따옴표 기호</p>
-              <div class="field">
-                <div class="seg" id="quoteMarksSeg">
-                  <button data-value="on" class="active">표시</button>
-                  <button data-value="off">숨김</button>
-                </div>
-                <p class="field-hint">문장을 드래그로 선택한 뒤 " 버튼을 누르면 여기서 정한 기울임·색·기호 설정대로 적용돼요.</p>
-              </div>
-
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <p class="section-title">말풍선</p>
-          <div class="field">
-            <div class="field-row"><span class="field-label">대사를 드래그로 선택한 뒤 버튼을 눌러주세요</span></div>
-            <div class="field-row" style="margin-top:10px;">
-              <button class="btn ghost" id="btnMakeBubble" style="width:100%; padding:9px 12px; font-size:12.5px;">선택한 문장을 말풍선으로 만들기</button>
-            </div>
-          </div>
-          <div class="field" id="bubbleEditWrap" style="display:none;">
-            <div class="field-row"><span class="field-label">선택된 말풍선</span></div>
-            <div class="field-row" style="margin-top:10px; gap:8px;">
-              <div class="seg" id="bubbleDirSeg" style="flex:1;">
-                <button data-value="left" class="active">왼쪽</button>
-                <button data-value="right">오른쪽</button>
-              </div>
-              <div class="seg" id="bubbleMoveSeg" style="flex:0 0 auto;">
-                <button type="button" id="btnBubbleMoveUp" aria-label="말풍선 위로 이동" style="padding:8px 12px;">▲</button>
-                <button type="button" id="btnBubbleMoveDown" aria-label="말풍선 아래로 이동" style="padding:8px 12px;">▼</button>
-              </div>
-            </div>
-            <p class="field-hint" style="margin-top:2px;">말풍선 위 손잡이(⠿)를 끌어도 문단 사이로 옮길 수 있어요.</p>
-            <div class="swatches" style="margin-top:14px;" id="bubbleColorSwatches">
-              <span class="swatch active" data-bubble="#2F6FED" style="background:#2F6FED"></span>
-              <span class="swatch" data-bubble="#AEDBFB" style="background:#AEDBFB"></span>
-              <span class="swatch" data-bubble="#111111" style="background:#111111"></span>
-              <span class="swatch" data-bubble="#FFFFFF" style="background:#FFFFFF"></span>
-              <input type="hidden" id="bubbleColorCustom" value="#2f6fed"><button type="button" class="cp-trigger" data-for="bubbleColorCustom" aria-label="말풍선 색 직접 선택"></button>
-            </div>
-
-            <div class="field-row" style="margin-top:16px;"><span class="field-label">말풍선 글자색</span></div>
-            <div class="swatches" style="margin-top:10px;" id="bubbleTextColorSwatches">
-              <span class="swatch active" data-bubbletext="#FFFFFF" style="background:#FFFFFF"></span>
-              <span class="swatch" data-bubbletext="#111111" style="background:#111111"></span>
-              <span class="swatch" data-bubbletext="#2F6FED" style="background:#2F6FED"></span>
-              <span class="swatch" data-bubbletext="#B3554B" style="background:#B3554B"></span>
-              <input type="hidden" id="bubbleTextColorCustom" value="#ffffff"><button type="button" class="cp-trigger" data-for="bubbleTextColorCustom" aria-label="말풍선 글자색 직접 선택"></button>
-            </div>
-
-            <div class="field" style="margin-top:16px;">
-              <div class="field-row"><span class="field-label">말풍선 글자 크기</span><span class="field-value" id="bubbleSizeVal">92%</span></div>
-              <input type="range" id="bubbleSizeRange" min="60" max="160" step="1" value="92">
-            </div>
-            <div class="field">
-              <div class="field-row"><span class="field-label">모서리 둥글기</span><span class="field-value" id="bubbleRadiusVal">18px</span></div>
-              <input type="range" id="bubbleRadiusRange" min="4" max="36" step="1" value="18">
-            </div>
-
-            <div class="field-row" style="margin-top:14px;">
-              <button class="btn ghost" id="btnBubbleDelete" style="width:100%; padding:9px 12px; font-size:12.5px; color:var(--danger);">이 말풍선 삭제</button>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
           <p class="section-title">이미지 삽입</p>
           <div class="field">
             <div class="field-row"><span class="field-label">문단 사이에 넣을 위치에 커서를 두고 눌러주세요</span></div>
             <div class="field-row" style="margin-top:10px;">
-              <button class="btn ghost" id="btnInsertParaImage" style="width:100%; padding:9px 12px; font-size:12.5px;">커서 위치에 사진 삽입</button>
+              <button class="btn ghost" id="btnInsertParaImage" style="width:100%; padding:9px 12px; font-size:11.5px;">커서 위치에 사진 삽입</button>
             </div>
             <input type="file" id="paraImageInput" accept="image/*" style="display:none;">
           </div>
@@ -970,7 +978,7 @@
             <p class="field-hint">둥글기 설정은 이 브라우저에 저장되어 다음에 사진을 넣을 때도 그대로 유지돼요.</p>
 
             <div class="field-row" style="margin-top:14px;">
-              <button class="btn ghost" id="btnParaImageDelete" style="width:100%; padding:9px 12px; font-size:12.5px; color:var(--danger);">이 이미지 삭제</button>
+              <button class="btn ghost" id="btnParaImageDelete" style="width:100%; padding:9px 12px; font-size:11.5px; color:var(--danger);">이 이미지 삭제</button>
             </div>
           </div>
 
@@ -987,6 +995,175 @@
           <div class="field">
             <div class="field-row"><span class="field-label">출처 표기 크기</span><span class="field-value" id="creditSizeVal">13px</span></div>
             <input type="range" id="creditSizeRange" min="8" max="40" step="1" value="13">
+          </div>
+
+        </section>
+
+        <!-- ===== DIALOGUE TAB ===== -->
+        <section class="panel-section" data-panel="dialogue">
+
+          <p class="section-title">대사 스타일</p>
+          <div class="field">
+            <div class="field-row"><span class="field-label">대사를 표현할 방식을 선택하세요</span></div>
+            <div class="seg" id="pasteQuoteModeSeg" style="margin-top:10px;">
+              <button data-value="quote" class="active">따옴표</button>
+              <button data-value="bubble">말풍선</button>
+            </div>
+            <p class="field-hint">붙여넣기 자동 서식과 아래 '선택한 문장을 대사로 만들기' 버튼 모두 여기서 고른 방식을 따라요.</p>
+          </div>
+
+          <div class="field" style="margin-top:6px;">
+            <div class="field-row"><span class="field-label">대사로 만들 문장을 드래그로 선택한 뒤 눌러주세요</span></div>
+            <div class="field-row" style="margin-top:10px;">
+              <button class="btn ghost" id="btnMakeDialogue" style="width:100%; padding:9px 12px; font-size:11.5px;">선택한 문장을 대사로 만들기</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div id="quoteDetailWrap">
+            <p class="section-title">따옴표 세부 설정</p>
+
+            <div class="field">
+              <div class="toggle-grid">
+                <div class="toggle-row">
+                  <span class="toggle-row-label">기울임</span>
+                  <button type="button" class="toggle-switch on" id="quoteItalicToggle" role="switch" aria-checked="true" aria-label="따옴표 기울임"></button>
+                </div>
+                <div class="toggle-row">
+                  <span class="toggle-row-label">기호 표시</span>
+                  <button type="button" class="toggle-switch on" id="quoteMarksToggle" role="switch" aria-checked="true" aria-label="따옴표 기호 표시"></button>
+                </div>
+              </div>
+            </div>
+
+            <p class="section-title">따옴표 색</p>
+            <div class="field">
+              <div class="swatches" id="quoteColorSwatches">
+                <span class="swatch active" data-qc="#8C8C8C" style="background:#8C8C8C"></span>
+                <span class="swatch" data-qc="#B3554B" style="background:#B3554B"></span>
+                <span class="swatch" data-qc="#33415C" style="background:#33415C"></span>
+                <span class="swatch" data-qc="#111111" style="background:#111111"></span>
+                <span class="swatch" data-qc="#FFFFFF" style="background:#FFFFFF"></span>
+                <input type="hidden" id="qcCustom" value="#8c8c8c"><button type="button" class="cp-trigger" data-for="qcCustom" aria-label="따옴표 색 직접 선택"></button>
+              </div>
+              <p class="field-hint">문장을 드래그로 선택한 뒤 위 버튼을 누르면 여기서 정한 기울임·색·기호 설정대로 적용돼요.</p>
+            </div>
+          </div>
+
+          <div id="bubbleDetailWrap" style="display:none;">
+            <p class="section-title">말풍선 모양</p>
+            <div class="field">
+              <div class="shape-picker" id="bubbleShapePicker">
+                <button type="button" class="shape-card active" data-value="basic">
+                  <span class="shape-preview shape-basic"></span>
+                  <span class="shape-card-label">기본</span>
+                </button>
+                <button type="button" class="shape-card" data-value="square">
+                  <span class="shape-preview shape-square"></span>
+                  <span class="shape-card-label">모서리</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="toggle-grid">
+                <div class="toggle-row">
+                  <span class="toggle-row-label">화자 이름</span>
+                  <button type="button" class="toggle-switch" id="bubbleSpeakerShowToggle" role="switch" aria-checked="false" aria-label="화자 이름 표시"></button>
+                </div>
+                <div class="toggle-row">
+                  <span class="toggle-row-label">말풍선 그림자</span>
+                  <button type="button" class="toggle-switch" id="bubbleShadowToggle" role="switch" aria-checked="false" aria-label="말풍선 그림자"></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="field">
+              <input type="text" class="text-input" id="bubbleSpeakerNameInput" placeholder="화자 이름 (예: 민수)" maxlength="20">
+              <p class="field-hint">'화자 이름' 토글을 켜야 말풍선 위에 이름표로 보여요. 같은 화자가 연달아 보낸 말풍선은 두 번째부터 이름표가 자동으로 생략돼요.</p>
+            </div>
+
+            <p class="section-title">화자 이름 색</p>
+            <div class="field">
+              <div class="swatches" id="bubbleSpeakerColorSwatches">
+                <span class="swatch active" data-speakercolor="#8C8C8C" style="background:#8C8C8C"></span>
+                <span class="swatch" data-speakercolor="#111111" style="background:#111111"></span>
+                <span class="swatch" data-speakercolor="#2F6FED" style="background:#2F6FED"></span>
+                <span class="swatch" data-speakercolor="#B3554B" style="background:#B3554B"></span>
+                <span class="swatch" data-speakercolor="#FFFFFF" style="background:#FFFFFF"></span>
+                <input type="hidden" id="bubbleSpeakerColorCustom" value="#8c8c8c"><button type="button" class="cp-trigger" data-for="bubbleSpeakerColorCustom" aria-label="화자 이름 색 직접 선택"></button>
+              </div>
+            </div>
+
+            <p class="section-title">말풍선 색</p>
+            <div class="field">
+              <div class="swatches" id="bubbleColorSwatches">
+                <span class="swatch active" data-bubble="#2F6FED" style="background:#2F6FED"></span>
+                <span class="swatch" data-bubble="#AEDBFB" style="background:#AEDBFB"></span>
+                <span class="swatch" data-bubble="#111111" style="background:#111111"></span>
+                <span class="swatch" data-bubble="#FFFFFF" style="background:#FFFFFF"></span>
+                <input type="hidden" id="bubbleColorCustom" value="#2f6fed"><button type="button" class="cp-trigger" data-for="bubbleColorCustom" aria-label="말풍선 색 직접 선택"></button>
+              </div>
+            </div>
+
+            <p class="section-title">말풍선 글자색</p>
+            <div class="field">
+              <div class="swatches" id="bubbleTextColorSwatches">
+                <span class="swatch active" data-bubbletext="#FFFFFF" style="background:#FFFFFF"></span>
+                <span class="swatch" data-bubbletext="#111111" style="background:#111111"></span>
+                <span class="swatch" data-bubbletext="#2F6FED" style="background:#2F6FED"></span>
+                <span class="swatch" data-bubbletext="#B3554B" style="background:#B3554B"></span>
+                <input type="hidden" id="bubbleTextColorCustom" value="#ffffff"><button type="button" class="cp-trigger" data-for="bubbleTextColorCustom" aria-label="말풍선 글자색 직접 선택"></button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-row"><span class="field-label">말풍선 글자 크기</span><span class="field-value" id="bubbleSizeVal">92%</span></div>
+              <input type="range" id="bubbleSizeRange" min="60" max="160" step="1" value="92">
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">모서리 둥글기</span><span class="field-value" id="bubbleRadiusVal">26px</span></div>
+              <input type="range" id="bubbleRadiusRange" min="4" max="44" step="1" value="26">
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">안쪽 여백 · 가로</span><span class="field-value" id="bubblePadHVal">20px</span></div>
+              <input type="range" id="bubblePadHRange" min="6" max="40" step="1" value="20">
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">안쪽 여백 · 세로</span><span class="field-value" id="bubblePadVVal">14px</span></div>
+              <input type="range" id="bubblePadVRange" min="4" max="32" step="1" value="14">
+            </div>
+            <div class="field">
+              <div class="field-row"><span class="field-label">최대 너비</span><span class="field-value" id="bubbleMaxWidthVal">84%</span></div>
+              <input type="range" id="bubbleMaxWidthRange" min="40" max="100" step="1" value="84">
+              <p class="field-hint">말풍선이 캔버스 너비 대비 최대 얼마까지 넓어질 수 있는지 정해요.</p>
+            </div>
+
+            <div class="divider"></div>
+
+            <div id="bubbleNoSelectionHint">
+              <p class="field-hint" style="margin:0;">위 설정은 다음에 새로 만들 말풍선의 기본값으로 쓰여요. 이미 있는 말풍선을 탭해서 선택하면 그 말풍선에만 바로 적용돼요.</p>
+            </div>
+
+            <div id="bubbleSelectedActionsWrap" style="display:none;">
+              <div class="field-row"><span class="field-label">선택된 말풍선</span></div>
+              <div class="field-row" style="margin-top:10px; gap:8px;">
+                <div class="seg" id="bubbleDirSeg" style="flex:1;">
+                  <button data-value="left" class="active">왼쪽</button>
+                  <button data-value="right">오른쪽</button>
+                </div>
+                <div class="seg" id="bubbleMoveSeg" style="flex:0 0 auto;">
+                  <button type="button" id="btnBubbleMoveUp" aria-label="말풍선 위로 이동" style="padding:8px 12px;">▲</button>
+                  <button type="button" id="btnBubbleMoveDown" aria-label="말풍선 아래로 이동" style="padding:8px 12px;">▼</button>
+                </div>
+              </div>
+              <p class="field-hint" style="margin-top:2px;">말풍선 위 손잡이(⠿)를 끌어도 문단 사이로 옮길 수 있어요.</p>
+
+              <div class="field-row" style="margin-top:14px;">
+                <button class="btn ghost" id="btnBubbleDelete" style="width:100%; padding:9px 12px; font-size:11.5px; color:var(--danger);">이 말풍선 삭제</button>
+              </div>
+            </div>
           </div>
 
         </section>
@@ -1040,8 +1217,8 @@
             <div class="field">
               <div class="field-row"><span class="field-label">배경 이미지</span></div>
               <div class="field-row" style="margin-top:10px; gap:8px;">
-                <button class="btn ghost" id="btnBgImageUpload" style="flex:1; padding:9px 12px; font-size:12.5px;">이미지 선택</button>
-                <button class="btn ghost" id="btnBgImageClear" style="flex:1; padding:9px 12px; font-size:12.5px; color:var(--danger);">이미지 삭제</button>
+                <button class="btn ghost" id="btnBgImageUpload" style="flex:1; padding:9px 12px; font-size:11.5px;">이미지 선택</button>
+                <button class="btn ghost" id="btnBgImageClear" style="flex:1; padding:9px 12px; font-size:11.5px; color:var(--danger);">이미지 삭제</button>
               </div>
               <input type="file" id="bgImageInput" accept="image/*" style="display:none;">
               <p class="field-hint" id="bgImageStatus">선택된 이미지가 없어요.</p>
@@ -1162,7 +1339,8 @@
     quoteMarks: true,
     pasteQuoteFormat: true,
     pasteQuoteFormatMode: 'quote',
-    pasteItalicFormat: true
+    pasteItalicFormat: true,
+    pasteBoldFormat: true
   };
 
   /* ---------------- paste auto-format settings persistence ----------------
@@ -1178,6 +1356,7 @@
         if(typeof saved.pasteQuoteFormat === 'boolean') state.pasteQuoteFormat = saved.pasteQuoteFormat;
         if(saved.pasteQuoteFormatMode === 'quote' || saved.pasteQuoteFormatMode === 'bubble') state.pasteQuoteFormatMode = saved.pasteQuoteFormatMode;
         if(typeof saved.pasteItalicFormat === 'boolean') state.pasteItalicFormat = saved.pasteItalicFormat;
+        if(typeof saved.pasteBoldFormat === 'boolean') state.pasteBoldFormat = saved.pasteBoldFormat;
       }
     }catch(e){ /* ignore corrupt/unavailable storage */ }
   })();
@@ -1186,7 +1365,8 @@
       localStorage.setItem(PASTE_FORMAT_KEY, JSON.stringify({
         pasteQuoteFormat: state.pasteQuoteFormat,
         pasteQuoteFormatMode: state.pasteQuoteFormatMode,
-        pasteItalicFormat: state.pasteItalicFormat
+        pasteItalicFormat: state.pasteItalicFormat,
+        pasteBoldFormat: state.pasteBoldFormat
       }));
     }catch(e){ showToast('브라우저에 저장할 수 없어요'); }
   }
@@ -1223,23 +1403,30 @@
   bindSeg('weightSeg', v=>{ state.weight = +v; applyTextStyles(); });
   bindSeg('alignSeg', v=>{ state.align = v; applyTextStyles(); });
   bindSeg('ratioSeg', v=>{ state.ratio = v; updateCanvasSize(); });
-  function bindPasteToggle(btn, key, onAfter){
-    btn.addEventListener('click', ()=>{
-      state[key] = !state[key];
-      btn.classList.toggle('active', state[key]);
-      if(onAfter) onAfter();
-      persistPasteFormatSettings();
-    });
-  }
-  bindPasteToggle($('#btnPasteQuoteFormat'), 'pasteQuoteFormat', updatePasteQuoteModeVisibility);
-  bindPasteToggle($('#btnPasteItalicFormat'), 'pasteItalicFormat');
-  bindSeg('pasteQuoteModeSeg', v=>{ state.pasteQuoteFormatMode = v; persistPasteFormatSettings(); });
-  function updatePasteQuoteModeVisibility(){
-    const row = $('#pasteQuoteModeRow');
-    const seg = $('#pasteQuoteModeSeg');
-    const show = state.pasteQuoteFormat;
-    if(row) row.style.display = show ? '' : 'none';
-    if(seg) seg.style.display = show ? '' : 'none';
+  const setPasteQuoteFormatToggle = bindToggleSwitch('pasteQuoteFormatToggle', on=>{
+    state.pasteQuoteFormat = on;
+    persistPasteFormatSettings();
+  });
+  const setPasteItalicFormatToggle = bindToggleSwitch('pasteItalicFormatToggle', on=>{
+    state.pasteItalicFormat = on;
+    persistPasteFormatSettings();
+  });
+  const setPasteBoldFormatToggle = bindToggleSwitch('pasteBoldFormatToggle', on=>{
+    state.pasteBoldFormat = on;
+    persistPasteFormatSettings();
+  });
+  bindSeg('pasteQuoteModeSeg', v=>{ state.pasteQuoteFormatMode = v; persistPasteFormatSettings(); updateDialogueModeVisibility(); });
+  // Toggles which detail-settings block shows inside the 대사 탭: 따옴표
+  // 세부 설정 when the current dialogue style is 따옴표, or the full
+  // 말풍선 세부 설정 (always visible now, not selection-gated) when it's
+  // 말풍선. Independent of whether paste auto-recognition itself is
+  // on/off — this also governs the manual "대사로 만들기" button.
+  function updateDialogueModeVisibility(){
+    const isBubble = state.pasteQuoteFormatMode === 'bubble';
+    const quoteWrap = $('#quoteDetailWrap');
+    const bubbleWrap = $('#bubbleDetailWrap');
+    if(quoteWrap) quoteWrap.style.display = isBubble ? 'none' : '';
+    if(bubbleWrap) bubbleWrap.style.display = isBubble ? '' : 'none';
   }
   bindSeg('bgTypeSeg', v=>{
     state.bgType = v;
@@ -1889,8 +2076,8 @@
      in `state` (so they save/load with presets) and pushed as CSS
      variables, which means every existing and future qt span updates
      together — same pattern as the underline color "apply to all". */
-  bindSeg('quoteItalicSeg', v=>{ state.quoteItalic = (v === 'on'); applyTextStyles(); });
-  bindSeg('quoteMarksSeg', v=>{ state.quoteMarks = (v === 'on'); applyTextStyles(); });
+  const setQuoteItalicToggle = bindToggleSwitch('quoteItalicToggle', on=>{ state.quoteItalic = on; applyTextStyles(); });
+  const setQuoteMarksToggle = bindToggleSwitch('quoteMarksToggle', on=>{ state.quoteMarks = on; applyTextStyles(); });
 
   $$('#quoteColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
@@ -1955,7 +2142,15 @@
   let lastBubbleColor = '#2F6FED';
   let lastBubbleTextColor = '#FFFFFF';
   let lastBubbleSize = 92;
-  let lastBubbleRadius = 18;
+  let lastBubbleRadius = 26;
+  let lastBubbleShape = 'basic';    // 'basic' | 'square' — corner treatment; 'square' bubbles get a curled tail on the last message in a same-direction run (see refreshBubbleTailGrouping)
+  let lastBubbleSpeakerShow = false;
+  let lastBubbleSpeakerName = '';
+  let lastBubbleSpeakerColor = '#8C8C8C';
+  let lastBubbleShadow = false;
+  let lastBubblePadH = 20;
+  let lastBubblePadV = 14;
+  let lastBubbleMaxWidth = 84;
 
   /* ---------------- paragraph image: default corner radius ----------------
      Only the corner-roundness default is remembered across visits (applied
@@ -1976,21 +2171,125 @@
     catch(e){ showToast('브라우저에 저장할 수 없어요'); }
   }
 
-  // Keeps the "flap" corner (the little flat point that makes a bubble
-  // look like it's pointing at its row's edge) proportional whenever the
-  // roundness slider or the left/right direction changes — border-radius
-  // set inline overrides the CSS rule that used to do this, so it has to
-  // be re-applied here in JS instead.
+  // Keeps the corner treatment correct for whichever bubble shape is active
+  // whenever the roundness slider, shape, or left/right direction changes —
+  // border-radius set inline overrides the CSS rule that used to do this,
+  // so it has to be re-applied here in JS instead.
+  // - "basic" shape: one corner (nearest the row's edge) stays flattened
+  //   into a small flap, classic chat-bubble look. Unaffected by grouping.
+  // - "square" shape: every corner stays evenly rounded, iMessage-style —
+  //   the curled tail itself (.has-tail) is NOT decided here, since it
+  //   depends on this bubble's position in a same-direction run of
+  //   consecutive bubbles; see refreshBubbleTailGrouping().
   function applyBubbleCorner(bubble){
     if(!bubble) return;
     const radius = parseInt(bubble.dataset.radius, 10) || lastBubbleRadius;
+    const shape = bubble.dataset.shape || 'basic';
+    bubble.style.setProperty('--tail-size', Math.max(16, Math.min(26, Math.round(radius * 0.85))) + 'px');
     bubble.style.borderRadius = radius + 'px';
-    const flap = Math.max(2, Math.round(radius * 0.28));
-    bubble.style.borderBottomLeftRadius = '';
-    bubble.style.borderBottomRightRadius = '';
+    if(shape === 'square'){
+      bubble.style.borderBottomLeftRadius = radius + 'px';
+      bubble.style.borderBottomRightRadius = radius + 'px';
+    } else {
+      const flap = Math.max(2, Math.round(radius * 0.2));
+      bubble.style.borderBottomLeftRadius = '';
+      bubble.style.borderBottomRightRadius = '';
+      const row = bubble.closest('.bubble-row');
+      if(row && row.classList.contains('dir-right')) bubble.style.borderBottomRightRadius = flap + 'px';
+      else bubble.style.borderBottomLeftRadius = flap + 'px';
+    }
+  }
+
+  // Only "square"-shape bubbles ever show the curled tail, and only on the
+  // LAST bubble in a run of consecutive same-direction bubble-rows (nothing
+  // else — no paragraph, no image — in between) — matching how grouped
+  // messages look in a real chat app: earlier bubbles in a streak stay
+  // plain and rounded, only the newest one in the group points outward.
+  // Direction (dir-left/dir-right) stands in for "same speaker" here,
+  // since that's the only speaker-side signal every bubble always has.
+  // Works out which bubbles belong to the same "run" — consecutive
+  // messages from the same speaker on the same side — and styles them the
+  // way a chat app does: only the LAST bubble of a run gets the tail, and
+  // only the FIRST one shows the speaker's name label. Everything in
+  // between stays plain and fully rounded.
+  //
+  // Two bubbles count as the same speaker when their side (left/right) AND
+  // their speaker name match. Blank paragraphs left behind while editing
+  // are skipped rather than treated as a break in the run — otherwise
+  // pressing Enter between two messages would silently split the group.
+  function refreshBubbleTailGrouping(){
+    const isBlank = el => !el || el.textContent.replace(/\u200B/g, '').trim() === '';
+
+    // Reset first, so bubbles inside blank/removed rows can't keep stale styling.
+    $$('.bubble', textBlock).forEach(b=> b.classList.remove('has-tail'));
+
+    const seq = [];
+    Array.from(textBlock.children).forEach(el=>{
+      const isBubbleRow = el.classList && el.classList.contains('bubble-row');
+      const bubble = isBubbleRow ? el.querySelector('.bubble') : null;
+      if(isBubbleRow && bubble && !isBlank(bubble)){
+        const dir = el.classList.contains('dir-right') ? 'R' : 'L';
+        const name = (bubble.dataset.speaker || '').trim();
+        seq.push({ type:'bubble', row:el, bubble, key: dir + '\u241F' + name });
+      } else if(!isBlank(el)){
+        seq.push({ type:'break' });   // real paragraph or image ends the run
+      }
+    });
+
+    seq.forEach((item, idx)=>{
+      if(item.type !== 'bubble') return;
+      const prev = seq[idx - 1];
+      const next = seq[idx + 1];
+      const isFirst = !(prev && prev.type === 'bubble' && prev.key === item.key);
+      const isLast  = !(next && next.type === 'bubble' && next.key === item.key);
+      item.row.classList.toggle('speaker-hidden', !isFirst);
+      if(item.bubble.dataset.shape === 'square'){
+        item.bubble.classList.toggle('has-tail', isLast);
+      }
+    });
+  }
+
+  // Applies inner padding (dataset.padH/padV, px) to a bubble.
+  function applyBubblePadding(bubble){
+    if(!bubble) return;
+    const padH = parseInt(bubble.dataset.padH, 10);
+    const padV = parseInt(bubble.dataset.padV, 10);
+    bubble.style.padding =
+      (isNaN(padV) ? lastBubblePadV : padV) + 'px ' +
+      (isNaN(padH) ? lastBubblePadH : padH) + 'px';
+  }
+
+  // Applies the optional drop shadow (dataset.shadow 'on'/'off').
+  function applyBubbleShadow(bubble){
+    if(!bubble) return;
+    bubble.style.boxShadow = bubble.dataset.shadow === 'on'
+      ? '0 4px 14px rgba(17,17,17,0.18)'
+      : 'none';
+  }
+
+  // Creates/updates/removes the name-label element that sits above a
+  // bubble inside its row, based on that bubble's dataset.speaker/
+  // dataset.speakerShow. Called whenever either changes. Kept the same
+  // max-width as the bubble itself so long names wrap consistently.
+  function updateBubbleSpeaker(bubble){
+    if(!bubble) return;
     const row = bubble.closest('.bubble-row');
-    if(row && row.classList.contains('dir-right')) bubble.style.borderBottomRightRadius = flap + 'px';
-    else bubble.style.borderBottomLeftRadius = flap + 'px';
+    if(!row) return;
+    let label = row.querySelector('.bubble-speaker');
+    const show = bubble.dataset.speakerShow === 'on';
+    const name = (bubble.dataset.speaker || '').trim();
+    if(show && name){
+      if(!label){
+        label = document.createElement('div');
+        label.className = 'bubble-speaker';
+        row.insertBefore(label, bubble);
+      }
+      label.textContent = name;
+      label.style.color = bubble.dataset.speakerColor || lastBubbleSpeakerColor;
+      label.style.maxWidth = (bubble.dataset.maxWidth || lastBubbleMaxWidth) + '%';
+    } else if(label){
+      label.remove();
+    }
   }
 
   // The browser usually leaves the very first line of typed text as a bare
@@ -2125,6 +2424,17 @@
     bubble.style.fontSize = lastBubbleSize + '%';
     bubble.dataset.size = lastBubbleSize;
     bubble.dataset.radius = lastBubbleRadius;
+    bubble.dataset.shape = lastBubbleShape;
+    bubble.dataset.speaker = lastBubbleSpeakerName;
+    bubble.dataset.speakerColor = lastBubbleSpeakerColor;
+    bubble.dataset.speakerShow = lastBubbleSpeakerShow ? 'on' : 'off';
+    bubble.dataset.shadow = lastBubbleShadow ? 'on' : 'off';
+    bubble.dataset.padH = lastBubblePadH;
+    bubble.dataset.padV = lastBubblePadV;
+    bubble.dataset.maxWidth = lastBubbleMaxWidth;
+    bubble.style.maxWidth = lastBubbleMaxWidth + '%';
+    applyBubblePadding(bubble);
+    applyBubbleShadow(bubble);
     return bubble;
   }
 
@@ -2132,7 +2442,7 @@
     normalizeTopLevelParagraphs();
     const range = getSelRange();
     if(!range || range.collapsed){
-      showToast('말풍선으로 만들 문장을 먼저 선택해주세요');
+      showToast('대사로 만들 문장을 먼저 선택해주세요');
       return;
     }
     const row = document.createElement('div');
@@ -2151,13 +2461,23 @@
     promoteToTopLevel(row);
     makeBubbleHandle(row);
     applyBubbleCorner(bubble);
+    updateBubbleSpeaker(bubble);
     window.getSelection().removeAllRanges();
     savedRange = null;
     refreshPlaceholder();
     updateCanvasSize();
     selectBubble(bubble);
   }
-  $('#btnMakeBubble').addEventListener('click', convertSelectionToBubble);
+
+  // The unified "선택한 문장을 대사로 만들기" button: which of the two
+  // dialogue styles it produces follows the same state.pasteQuoteFormatMode
+  // switch used for paste auto-conversion, kept in sync via #pasteQuoteModeSeg
+  // (now living in the 대사 탭).
+  function makeDialogueFromSelection(){
+    if(state.pasteQuoteFormatMode === 'bubble') convertSelectionToBubble();
+    else toggleInlineFormat('qt');
+  }
+  $('#btnMakeDialogue').addEventListener('click', makeDialogueFromSelection);
 
   function selectBubble(bubble){
     deselectImageBox();
@@ -2168,12 +2488,14 @@
     }
     selectedBubble = bubble;
     bubble.classList.add('selected');
-    $('#bubbleEditWrap').style.display = 'block';
+    $('#bubbleSelectedActionsWrap').style.display = 'block';
+    $('#bubbleNoSelectionHint').style.display = 'none';
     const row = bubble.closest('.bubble-row');
     row.classList.add('row-selected');
     setSegActive('bubbleDirSeg', row.classList.contains('dir-right') ? 'right' : 'left');
     syncSwatch('#bubbleColorSwatches .swatch', 'bubble', bubble.dataset.color || lastBubbleColor, '#bubbleColorCustom');
     syncSwatch('#bubbleTextColorSwatches .swatch', 'bubbletext', bubble.dataset.textColor || lastBubbleTextColor, '#bubbleTextColorCustom');
+    syncSwatch('#bubbleSpeakerColorSwatches .swatch', 'speakercolor', bubble.dataset.speakerColor || lastBubbleSpeakerColor, '#bubbleSpeakerColorCustom');
 
     const size = bubble.dataset.size || lastBubbleSize;
     $('#bubbleSizeRange').value = size;
@@ -2182,6 +2504,23 @@
     const radius = bubble.dataset.radius || lastBubbleRadius;
     $('#bubbleRadiusRange').value = radius;
     $('#bubbleRadiusVal').textContent = radius + 'px';
+
+    const padH = bubble.dataset.padH || lastBubblePadH;
+    $('#bubblePadHRange').value = padH;
+    $('#bubblePadHVal').textContent = padH + 'px';
+
+    const padV = bubble.dataset.padV || lastBubblePadV;
+    $('#bubblePadVRange').value = padV;
+    $('#bubblePadVVal').textContent = padV + 'px';
+
+    const maxWidth = bubble.dataset.maxWidth || lastBubbleMaxWidth;
+    $('#bubbleMaxWidthRange').value = maxWidth;
+    $('#bubbleMaxWidthVal').textContent = maxWidth + '%';
+
+    setShapePickerActive('bubbleShapePicker', bubble.dataset.shape || 'basic');
+    setBubbleSpeakerShowToggle(bubble.dataset.speakerShow === 'on');
+    setBubbleShadowToggle(bubble.dataset.shadow === 'on');
+    $('#bubbleSpeakerNameInput').value = bubble.dataset.speaker || '';
   }
   function deselectBubble(){
     if(selectedBubble){
@@ -2190,7 +2529,8 @@
       if(row) row.classList.remove('row-selected');
     }
     selectedBubble = null;
-    $('#bubbleEditWrap').style.display = 'none';
+    $('#bubbleSelectedActionsWrap').style.display = 'none';
+    $('#bubbleNoSelectionHint').style.display = '';
   }
 
   // Move the selected bubble's row up/down among the top-level paragraphs
@@ -2300,6 +2640,79 @@
     updateCanvasSize();
   });
 
+  // ---- generic toggle-switch helper (used for every on/off setting) ----
+  // Returns a setState(bool) function so callers can sync the switch's
+  // visual state (e.g. when a different bubble gets selected) without
+  // re-triggering onChange.
+  function bindToggleSwitch(id, onChange){
+    const el = document.getElementById(id);
+    if(!el) return function(){};
+    function setState(on){
+      el.classList.toggle('on', !!on);
+      el.setAttribute('aria-checked', on ? 'true' : 'false');
+    }
+    el.addEventListener('click', ()=>{
+      const next = !el.classList.contains('on');
+      setState(next);
+      onChange(next);
+    });
+    return setState;
+  }
+
+  // ---- generic shape-picker helper (visual preview-card selector) ----
+  function bindShapePicker(id, onChange){
+    const wrap = document.getElementById(id);
+    if(!wrap) return;
+    $$('.shape-card', wrap).forEach(card=>{
+      card.addEventListener('click', ()=>{
+        $$('.shape-card', wrap).forEach(c=> c.classList.remove('active'));
+        card.classList.add('active');
+        onChange(card.dataset.value);
+      });
+    });
+  }
+  function setShapePickerActive(id, value){
+    const wrap = document.getElementById(id);
+    if(!wrap) return;
+    $$('.shape-card', wrap).forEach(c=> c.classList.toggle('active', c.dataset.value === value));
+  }
+
+  bindShapePicker('bubbleShapePicker', v=>{
+    lastBubbleShape = v;
+    if(selectedBubble){
+      selectedBubble.dataset.shape = v;
+      applyBubbleCorner(selectedBubble);
+      updateCanvasSize();
+    }
+  });
+
+  const setBubbleSpeakerShowToggle = bindToggleSwitch('bubbleSpeakerShowToggle', on=>{
+    lastBubbleSpeakerShow = on;
+    if(selectedBubble){
+      selectedBubble.dataset.speakerShow = on ? 'on' : 'off';
+      updateBubbleSpeaker(selectedBubble);
+      updateCanvasSize();
+    }
+  });
+
+  const setBubbleShadowToggle = bindToggleSwitch('bubbleShadowToggle', on=>{
+    lastBubbleShadow = on;
+    if(selectedBubble){
+      selectedBubble.dataset.shadow = on ? 'on' : 'off';
+      applyBubbleShadow(selectedBubble);
+      updateCanvasSize();
+    }
+  });
+
+  $('#bubbleSpeakerNameInput').addEventListener('input', e=>{
+    lastBubbleSpeakerName = e.target.value;
+    if(selectedBubble){
+      selectedBubble.dataset.speaker = e.target.value;
+      updateBubbleSpeaker(selectedBubble);
+      updateCanvasSize();
+    }
+  });
+
   $$('#bubbleColorSwatches .swatch').forEach(sw=>{
     sw.addEventListener('click', ()=>{
       if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
@@ -2348,12 +2761,37 @@
     }
   });
 
+  $$('#bubbleSpeakerColorSwatches .swatch').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      if(window.__isSwatchClickSuppressed && window.__isSwatchClickSuppressed()) return;
+      $$('#bubbleSpeakerColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+      sw.classList.add('active');
+      $('#bubbleSpeakerColorCustom').value = sw.dataset.speakercolor;
+      syncColorTrigger('bubbleSpeakerColorCustom', sw.dataset.speakercolor);
+      lastBubbleSpeakerColor = sw.dataset.speakercolor;
+      if(selectedBubble){
+        selectedBubble.dataset.speakerColor = sw.dataset.speakercolor;
+        updateBubbleSpeaker(selectedBubble);
+      }
+    });
+  });
+
+  $('#bubbleSpeakerColorCustom').addEventListener('input', e=>{
+    $$('#bubbleSpeakerColorSwatches .swatch').forEach(x=>x.classList.remove('active'));
+    lastBubbleSpeakerColor = e.target.value;
+    if(selectedBubble){
+      selectedBubble.dataset.speakerColor = e.target.value;
+      updateBubbleSpeaker(selectedBubble);
+    }
+  });
+
   $('#bubbleSizeRange').addEventListener('input', (e)=>{
     lastBubbleSize = +e.target.value;
     $('#bubbleSizeVal').textContent = e.target.value + '%';
     if(selectedBubble){
       selectedBubble.style.fontSize = e.target.value + '%';
       selectedBubble.dataset.size = e.target.value;
+      updateCanvasSize();
     }
   });
 
@@ -2363,6 +2801,38 @@
     if(selectedBubble){
       selectedBubble.dataset.radius = e.target.value;
       applyBubbleCorner(selectedBubble);
+      updateCanvasSize();
+    }
+  });
+
+  $('#bubblePadHRange').addEventListener('input', (e)=>{
+    lastBubblePadH = +e.target.value;
+    $('#bubblePadHVal').textContent = e.target.value + 'px';
+    if(selectedBubble){
+      selectedBubble.dataset.padH = e.target.value;
+      applyBubblePadding(selectedBubble);
+      updateCanvasSize();
+    }
+  });
+
+  $('#bubblePadVRange').addEventListener('input', (e)=>{
+    lastBubblePadV = +e.target.value;
+    $('#bubblePadVVal').textContent = e.target.value + 'px';
+    if(selectedBubble){
+      selectedBubble.dataset.padV = e.target.value;
+      applyBubblePadding(selectedBubble);
+      updateCanvasSize();
+    }
+  });
+
+  $('#bubbleMaxWidthRange').addEventListener('input', (e)=>{
+    lastBubbleMaxWidth = +e.target.value;
+    $('#bubbleMaxWidthVal').textContent = e.target.value + '%';
+    if(selectedBubble){
+      selectedBubble.dataset.maxWidth = e.target.value;
+      selectedBubble.style.maxWidth = e.target.value + '%';
+      updateBubbleSpeaker(selectedBubble);
+      updateCanvasSize();
     }
   });
 
@@ -2375,7 +2845,8 @@
     if(!wrapper.hasChildNodes()) wrapper.appendChild(document.createElement('br'));
     row.replaceWith(wrapper);
     selectedBubble = null;
-    $('#bubbleEditWrap').style.display = 'none';
+    $('#bubbleSelectedActionsWrap').style.display = 'none';
+    $('#bubbleNoSelectionHint').style.display = '';
     refreshPlaceholder();
     updateCanvasSize();
   });
@@ -2518,11 +2989,6 @@
 
     const radius = box.dataset.radius != null ? box.dataset.radius : lastImageRadius;
     box.style.borderRadius = radius + 'px';
-
-    // Belt-and-suspenders for the stale-paint issue above: force a
-    // synchronous layout/paint flush right after the style writes instead
-    // of leaving it to whatever interaction happens to trigger one next.
-    void box.offsetHeight;
   }
 
   // Recomputes the cropped image's background-size from its natural pixel
@@ -2870,6 +3336,7 @@
   };
 
   function updateCanvasSize(){
+    refreshBubbleTailGrouping();
     const mh = state.marginH, mv = state.marginV, w = state.width;
     canvas.style.padding = mv + 'px ' + mh + 'px';
     textBlock.style.width = '100%';
@@ -3012,21 +3479,34 @@
        only part of a longer line always becomes an inline 따옴표 span,
        since a mid-sentence chat bubble wouldn't make layout sense.
      - 기울임 자동 서식: *word* pairs become italic (asterisks removed).
+     - 볼드 자동 서식: **word** pairs become bold (asterisks removed). Bold
+       is matched before single-asterisk italic at every position, so
+       **bold** isn't accidentally split into stray italic markers.
      Each can be switched off independently to paste as-is. */
-  function buildItalicFragment(text){
+  function buildInlineFormatFragment(text){
     const frag = document.createDocumentFragment();
-    if(!state.pasteItalicFormat){
+    const boldOn = state.pasteBoldFormat;
+    const italicOn = state.pasteItalicFormat;
+    if(!boldOn && !italicOn){
       frag.appendChild(document.createTextNode(text));
       return frag;
     }
-    const re = /\*([^*\n]+)\*/g;
+    const re = (boldOn && italicOn) ? /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g
+              : boldOn ? /\*\*([^*\n]+)\*\*/g
+              : /\*([^*\n]+)\*/g;
     let lastIndex = 0, m, matched = false;
     while((m = re.exec(text))){
       matched = true;
       if(m.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
       const span = document.createElement('span');
-      span.className = 'it';
-      span.textContent = m[1];
+      if(boldOn && italicOn){
+        if(m[1] !== undefined){ span.className = 'b'; span.textContent = m[1]; }
+        else { span.className = 'it'; span.textContent = m[2]; }
+      } else if(boldOn){
+        span.className = 'b'; span.textContent = m[1];
+      } else {
+        span.className = 'it'; span.textContent = m[1];
+      }
       frag.appendChild(span);
       lastIndex = re.lastIndex;
     }
@@ -3046,41 +3526,67 @@
   function buildLineFragment(line){
     const frag = document.createDocumentFragment();
     if(!state.pasteQuoteFormat){
-      frag.appendChild(buildItalicFragment(line));
+      frag.appendChild(buildInlineFormatFragment(line));
       return frag;
     }
     QUOTE_SEGMENT_RE.lastIndex = 0;
     let lastIndex = 0, m, matched = false;
     while((m = QUOTE_SEGMENT_RE.exec(line))){
       matched = true;
-      if(m.index > lastIndex) frag.appendChild(buildItalicFragment(line.slice(lastIndex, m.index)));
+      if(m.index > lastIndex) frag.appendChild(buildInlineFormatFragment(line.slice(lastIndex, m.index)));
       const inner = m[1] !== undefined ? m[1] : m[2];
       const qt = document.createElement('span');
       qt.className = 'qt';
-      qt.appendChild(buildItalicFragment(inner));
+      qt.appendChild(buildInlineFormatFragment(inner));
       frag.appendChild(qt);
       lastIndex = QUOTE_SEGMENT_RE.lastIndex;
     }
     if(!matched){
-      frag.appendChild(buildItalicFragment(line));
+      frag.appendChild(buildInlineFormatFragment(line));
     } else if(lastIndex < line.length){
-      frag.appendChild(buildItalicFragment(line.slice(lastIndex)));
+      frag.appendChild(buildInlineFormatFragment(line.slice(lastIndex)));
     }
     return frag;
   }
 
-  // Builds a bubble row the same way the manual "말풍선으로 만들기" button
-  // does (see createStyledBubble/makeBubbleHandle/applyBubbleCorner above),
-  // just from a plain string instead of a live selection Range.
-  function buildBubbleRowForPaste(text){
+  // '이름 | 내용' 형식의 화자 표기를 찾는다. 파이프(|)가 홑따옴표('...')
+  // 안에 있으면 이름 구분자로 보지 않는다 — 예를 들어 대사 안에 홑따옴표로
+  // 감싼 속마음이 있고 그 안에 우연히 '|'가 들어간 경우를 화자 이름으로
+  //잘못 인식하지 않기 위해서다.
+  function extractSpeakerLine(line){
+    let inQuote = false;
+    for(let i=0; i<line.length; i++){
+      const ch = line[i];
+      if(ch === "'"){ inQuote = !inQuote; continue; }
+      if(ch === '|' && !inQuote){
+        const name = line.slice(0, i).trim();
+        const rest = line.slice(i+1).trim();
+        if(name && rest && name.length <= 20) return { name, rest };
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // Builds a bubble row the same way the manual "선택한 문장을 대사로
+  // 만들기" button does (see createStyledBubble/makeBubbleHandle/
+  // applyBubbleCorner above), just from a plain string instead of a live
+  // selection Range. speakerName, when given, is shown as a name label
+  // above the bubble.
+  function buildBubbleRowForPaste(text, speakerName){
     const row = document.createElement('div');
     row.className = 'bubble-row dir-left';
     row.contentEditable = 'false';
     const bubble = createStyledBubble();
-    bubble.appendChild(buildItalicFragment(text));
+    bubble.appendChild(buildInlineFormatFragment(text));
     row.appendChild(bubble);
+    if(speakerName){
+      bubble.dataset.speaker = speakerName;
+      bubble.dataset.speakerShow = 'on';
+    }
     makeBubbleHandle(row);
     applyBubbleCorner(bubble);
+    updateBubbleSpeaker(bubble);
     return row;
   }
 
@@ -3103,10 +3609,19 @@
     const frag = document.createDocumentFragment();
     let lastNode = null;
     lines.forEach(line=>{
-      const wholeLineMatch = bubbleMode ? line.trim().match(WHOLE_LINE_QUOTE_RE) : null;
-      if(wholeLineMatch){
-        const inner = wholeLineMatch[1] !== undefined ? wholeLineMatch[1] : wholeLineMatch[2];
-        const row = buildBubbleRowForPaste(inner);
+      // '이름 | 내용' 화자 표기는 말풍선 모드에서만 인식한다 — 화자 이름은
+      // 말풍선 위에 표시하는 개념이라 따옴표(인라인) 모드에는 적용할 곳이
+      // 없다.
+      let speakerName = null;
+      let contentLine = line;
+      if(bubbleMode){
+        const extracted = extractSpeakerLine(line.trim());
+        if(extracted){ speakerName = extracted.name; contentLine = extracted.rest; }
+      }
+      const wholeLineMatch = bubbleMode ? contentLine.trim().match(WHOLE_LINE_QUOTE_RE) : null;
+      if(bubbleMode && (wholeLineMatch || speakerName)){
+        const inner = wholeLineMatch ? (wholeLineMatch[1] !== undefined ? wholeLineMatch[1] : wholeLineMatch[2]) : contentLine.trim();
+        const row = buildBubbleRowForPaste(inner, speakerName);
         frag.appendChild(row);
         lastNode = row;
       } else {
@@ -3284,6 +3799,98 @@
       if(c){ c.value = value; syncColorTrigger(customSel.replace('#',''), value); }
     }
   }
+  /* ---------------- bubble defaults: persistence ----------------
+     The 말풍선 controls don't live in `state` (they're per-bubble values
+     that double as "defaults for the next bubble"), so they need their own
+     save/restore path. Saved to localStorage on every change and also
+     folded into presets, so a preset restores the whole 말풍선 look too. */
+  const BUBBLE_DEFAULTS_KEY = 'oreo_bubble_defaults_v1';
+
+  function getBubbleDefaults(){
+    return {
+      color: lastBubbleColor,
+      textColor: lastBubbleTextColor,
+      speakerColor: lastBubbleSpeakerColor,
+      size: lastBubbleSize,
+      radius: lastBubbleRadius,
+      shape: lastBubbleShape,
+      speakerShow: lastBubbleSpeakerShow,
+      speakerName: lastBubbleSpeakerName,
+      shadow: lastBubbleShadow,
+      padH: lastBubblePadH,
+      padV: lastBubblePadV,
+      maxWidth: lastBubbleMaxWidth
+    };
+  }
+  function setBubbleDefaults(d){
+    if(!d || typeof d !== 'object') return;
+    const str = (v, fallback) => (typeof v === 'string' && v) ? v : fallback;
+    const num = (v, fallback) => (typeof v === 'number' && isFinite(v)) ? v : fallback;
+    lastBubbleColor       = str(d.color, lastBubbleColor);
+    lastBubbleTextColor   = str(d.textColor, lastBubbleTextColor);
+    lastBubbleSpeakerColor= str(d.speakerColor, lastBubbleSpeakerColor);
+    lastBubbleSize        = num(d.size, lastBubbleSize);
+    lastBubbleRadius      = num(d.radius, lastBubbleRadius);
+    lastBubbleShape       = (d.shape === 'square' || d.shape === 'basic') ? d.shape : lastBubbleShape;
+    lastBubbleSpeakerShow = (typeof d.speakerShow === 'boolean') ? d.speakerShow : lastBubbleSpeakerShow;
+    lastBubbleSpeakerName = (typeof d.speakerName === 'string') ? d.speakerName : lastBubbleSpeakerName;
+    lastBubbleShadow      = (typeof d.shadow === 'boolean') ? d.shadow : lastBubbleShadow;
+    lastBubblePadH        = num(d.padH, lastBubblePadH);
+    lastBubblePadV        = num(d.padV, lastBubblePadV);
+    lastBubbleMaxWidth    = num(d.maxWidth, lastBubbleMaxWidth);
+  }
+
+  let bubbleDefaultsLoaded = false;
+  function persistBubbleDefaults(){
+    if(!bubbleDefaultsLoaded) return;   // don't overwrite saved data during startup
+    try{ localStorage.setItem(BUBBLE_DEFAULTS_KEY, JSON.stringify(getBubbleDefaults())); }
+    catch(e){ /* quota/private mode - not worth interrupting the user for */ }
+  }
+  function loadBubbleDefaults(){
+    try{
+      const raw = localStorage.getItem(BUBBLE_DEFAULTS_KEY);
+      if(raw) setBubbleDefaults(JSON.parse(raw));
+    }catch(e){ /* ignore corrupt/unavailable storage */ }
+    bubbleDefaultsLoaded = true;
+  }
+
+  // Pushes the current defaults back into the 대사 탭 controls. Used at
+  // startup and after a preset is applied.
+  function applyBubbleDefaultsToUI(){
+    setShapePickerActive('bubbleShapePicker', lastBubbleShape);
+    setBubbleSpeakerShowToggle(lastBubbleSpeakerShow);
+    setBubbleShadowToggle(lastBubbleShadow);
+    $('#bubbleSpeakerNameInput').value = lastBubbleSpeakerName;
+    syncSwatch('#bubbleColorSwatches .swatch', 'bubble', lastBubbleColor, '#bubbleColorCustom');
+    syncSwatch('#bubbleTextColorSwatches .swatch', 'bubbletext', lastBubbleTextColor, '#bubbleTextColorCustom');
+    syncSwatch('#bubbleSpeakerColorSwatches .swatch', 'speakercolor', lastBubbleSpeakerColor, '#bubbleSpeakerColorCustom');
+    [['#bubbleSizeRange','#bubbleSizeVal',lastBubbleSize,'%'],
+     ['#bubbleRadiusRange','#bubbleRadiusVal',lastBubbleRadius,'px'],
+     ['#bubblePadHRange','#bubblePadHVal',lastBubblePadH,'px'],
+     ['#bubblePadVRange','#bubblePadVVal',lastBubblePadV,'px'],
+     ['#bubbleMaxWidthRange','#bubbleMaxWidthVal',lastBubbleMaxWidth,'%']].forEach(([r,v,val,suffix])=>{
+      const re = $(r), ve = $(v);
+      if(re) re.value = val;
+      if(ve) ve.textContent = val + suffix;
+    });
+  }
+
+  // Every 말풍선 control lives inside #bubbleDetailWrap and each one's own
+  // handler has already updated the lastBubble* variables by the time the
+  // event finishes bubbling up here, so one delegated listener can cover
+  // all of them instead of threading a save call through ~13 handlers.
+  (function bindBubbleDefaultsAutosave(){
+    const wrap = $('#bubbleDetailWrap');
+    if(!wrap) return;
+    let timer = null;
+    const schedule = ()=>{
+      clearTimeout(timer);
+      timer = setTimeout(persistBubbleDefaults, 200);
+    };
+    wrap.addEventListener('input', schedule);
+    wrap.addEventListener('click', schedule);
+  })();
+
   function syncUIFromState(){
     $('#fontSelect').value = state.font;
     setSegActive('weightSeg', String(state.weight));
@@ -3305,12 +3912,13 @@
     syncSwatch('[data-bg]', 'bg', state.bgA, '#bgACustom');
     syncSwatch('[data-bg2]', 'bg2', state.bgB, '#bgBCustom');
 
-    $('#btnPasteQuoteFormat').classList.toggle('active', state.pasteQuoteFormat);
-    $('#btnPasteItalicFormat').classList.toggle('active', state.pasteItalicFormat);
+    setPasteQuoteFormatToggle(state.pasteQuoteFormat);
+    setPasteItalicFormatToggle(state.pasteItalicFormat);
+    setPasteBoldFormatToggle(state.pasteBoldFormat);
     setSegActive('pasteQuoteModeSeg', state.pasteQuoteFormatMode);
-    updatePasteQuoteModeVisibility();
-    setSegActive('quoteItalicSeg', state.quoteItalic ? 'on' : 'off');
-    setSegActive('quoteMarksSeg', state.quoteMarks ? 'on' : 'off');
+    updateDialogueModeVisibility();
+    setQuoteItalicToggle(state.quoteItalic);
+    setQuoteMarksToggle(state.quoteMarks);
     syncSwatch('#quoteColorSwatches .swatch', 'qc', state.quoteColor, '#qcCustom');
   }
 
@@ -3354,17 +3962,6 @@
     });
   })();
 
-  /* ---------------- quote formatting: collapse toggle ---------------- */
-  (function(){
-    const acc = $('#quoteAccordion');
-    const head = $('#quoteAccordionHead');
-    if(!acc || !head) return;
-    head.addEventListener('click', ()=>{
-      const collapsed = acc.classList.toggle('collapsed');
-      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    });
-  })();
-
   /* ---------------- presets (saved in this browser) ---------------- */
   const PRESET_KEY = 'oreo_presets_v1';
   const PRESET_MAX = 3;
@@ -3396,13 +3993,18 @@
     // can exceed the browser's localStorage quota, which would break preset
     // saving entirely. Every other appearance/layout setting is preserved.
     const { creditCharacter, creditAuthor, bgImage, ...rest } = state;
-    return Object.assign({}, rest, { savedAt: Date.now() });
+    return Object.assign({}, rest, { bubbleDefaults: getBubbleDefaults(), savedAt: Date.now() });
   }
   function applyPreset(data){
     Object.keys(state).forEach(k=>{
       if(k === 'creditCharacter' || k === 'creditAuthor' || k === 'bgImage') return;
       if(k in data) state[k] = data[k];
     });
+    if(data.bubbleDefaults){
+      setBubbleDefaults(data.bubbleDefaults);
+      applyBubbleDefaultsToUI();
+      persistBubbleDefaults();
+    }
     syncUIFromState();
     applyTextStyles();
     applyBackground();
@@ -3480,6 +4082,7 @@
       { key:'qc',         sel:'#quoteColorSwatches',      attr:'qc',         stateKey:'quoteColor' },
       { key:'bubble',     sel:'#bubbleColorSwatches',     attr:'bubble',     stateKey:'lastBubbleColor' },
       { key:'bubbletext', sel:'#bubbleTextColorSwatches', attr:'bubbletext', stateKey:'lastBubbleTextColor' },
+      { key:'speakercolor', sel:'#bubbleSpeakerColorSwatches', attr:'speakercolor', stateKey:'lastBubbleSpeakerColor' },
       { key:'bgA',        sel:'#bgAColorSwatches',        attr:'bg',         stateKey:'bgA' },
       { key:'bgB',        sel:'#bgBColorSwatches',        attr:'bg2',        stateKey:'bgB' }
     ];
@@ -3593,6 +4196,8 @@
           lastBubbleColor = newColor;
         } else if(group.stateKey === 'lastBubbleTextColor'){
           lastBubbleTextColor = newColor;
+        } else if(group.stateKey === 'lastBubbleSpeakerColor'){
+          lastBubbleSpeakerColor = newColor;
         }
       }
     });
@@ -3602,7 +4207,9 @@
   $('#paraImageRadiusRange').value = lastImageRadius;
   $('#paraImageRadiusVal').textContent = lastImageRadius + 'px';
   refreshPlaceholder();
+  loadBubbleDefaults();
   syncUIFromState();
+  applyBubbleDefaultsToUI();
   applyTextStyles();
   applyBackground();
   updateCanvasSize();
